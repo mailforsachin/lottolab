@@ -1,6 +1,7 @@
 """Application configuration."""
 
 import os
+import json
 from typing import List, Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, field_validator
@@ -37,8 +38,14 @@ class Settings(BaseSettings):
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def parse_origins(cls, v):
+        """Parse ALLOWED_ORIGINS from string or list."""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            # Try to parse as JSON array
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                # Fallback: split by comma
+                return [origin.strip() for origin in v.split(",")]
         return v
     
     class Config:
