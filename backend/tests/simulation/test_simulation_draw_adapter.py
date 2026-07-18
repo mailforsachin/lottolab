@@ -272,3 +272,52 @@ def test_rejects_duplicate_main_numbers():
             draw,
             LOTTO_649,
         )
+
+
+def test_lotto_invalid_duplicate_bonus_is_not_loaded_as_target():
+    """Legacy invalid bonus metadata must not become an evaluation target."""
+    from unittest.mock import MagicMock
+
+    draw = Draw(
+        id=8,
+        lottery_type="6/49",
+        numbers=[17, 26, 41, 43, 44, 49],
+        bonus=49,
+    )
+
+    session = MagicMock()
+
+    query = (
+        session.query.return_value
+        .filter.return_value
+        .order_by.return_value
+    )
+    query.all.return_value = [draw]
+
+    with pytest.raises(
+        ValueError,
+        match="No valid evaluation targets",
+    ):
+        SimulationDrawAdapter.load_targets(
+            session=session,
+            game=LOTTO_649,
+        )
+
+
+def test_strict_conversion_still_rejects_duplicate_bonus():
+    """Direct target conversion must remain strict."""
+    draw = Draw(
+        id=8,
+        lottery_type="6/49",
+        numbers=[17, 26, 41, 43, 44, 49],
+        bonus=49,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="duplicates a main number",
+    ):
+        SimulationDrawAdapter.from_orm_draw(
+            draw=draw,
+            game=LOTTO_649,
+        )

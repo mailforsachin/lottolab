@@ -6,6 +6,10 @@ SimulationTarget domain objects.
 
 It never inserts, updates, deletes, or mutates historical Draw rows.
 Chronological ordering is explicitly defined by draw_date ASC, id ASC.
+
+Historical rows that have valid main numbers but invalid outcome metadata
+(such as a Lotto 6/49 bonus duplicating a main number) are not repaired or
+guessed. Such rows are excluded from evaluation targets.
 """
 
 from __future__ import annotations
@@ -92,7 +96,11 @@ class SimulationDrawAdapter:
         draw: Draw,
         game: GameConfig,
     ) -> SimulationTarget:
-        """Convert one ORM Draw into an immutable target."""
+        """Convert one ORM Draw into a strict immutable target.
+
+        Evaluation targets require complete and internally valid outcome
+        metadata. No missing or invalid bonus/Grand value is inferred.
+        """
         if draw.id is None:
             raise ValueError(
                 "Historical draw must have an ID."
@@ -199,15 +207,57 @@ class SimulationDrawAdapter:
         )
 
     @classmethod
+    def _is_known_invalid_target(
+        cls,
+        draw: Draw,
+        game: GameConfig,
+    ) -> bool:
+        """Return whether outcome metadata makes a row target-ineligible.
+
+        This method intentionally recognizes only narrowly defined outcome
+        defects. Structural corruption of main numbers must still fail
+        loudly rather than being silently discarded.
+        """
+        if game.name == LOTTO_649.name:
+            if not isinstance(draw.numbers, list):
+                return False
+
+            try:
+                main_numbers = tuple(
+                    int(number)
+                    for number in draw.numbers
+                )
+            except (TypeError, ValueError):
+                return False
+
+            if draw.bonus is None:
+                return True
+
+            try:
+                bonus_number = int(draw.bonus)
+            except (TypeError, ValueError):
+                return True
+
+            return (
+                not 1 <= bonus_number <= 49
+                or bonus_number in main_numbers
+            )
+
+        return False
+
+    @classmethod
     def load_targets(
         cls,
         session: Session,
         game: GameConfig,
     ) -> tuple[SimulationTarget, ...]:
-        """Load historical targets in deterministic chronology.
+        """Load valid evaluation targets in deterministic chronology.
 
-        This method performs a SELECT only. Historical Draw rows are
-        never modified.
+        This method performs SELECT operations only.
+
+        Rows with valid historical main numbers but known-invalid target
+        metadata are excluded from evaluation rather than repaired. Other
+        structural validation errors continue to fail loudly.
         """
         lottery_type = cls.lottery_type_for_game(
             game
@@ -231,10 +281,26 @@ class SimulationDrawAdapter:
                 f"{lottery_type}."
             )
 
-        return tuple(
-            cls.from_orm_draw(
+        targets: list[SimulationTarget] = []
+
+        for row in rows:
+            if cls._is_known_invalid_target(
                 draw=row,
                 game=game,
+            ):
+                continue
+
+            targets.append(
+                cls.from_orm_draw(
+                    draw=row,
+                    game=game,
+                )
             )
-            for row in rows
-        )
+
+        if not targets:
+            raise ValueError(
+                f"No valid evaluation targets found for "
+                f"{lottery_type}."
+            )
+
+        return tuple(targets)
