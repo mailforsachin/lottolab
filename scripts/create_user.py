@@ -19,6 +19,7 @@ def create_user():
         existing = session.query(User).filter(User.username == "admin").first()
         if existing:
             print("⚠️  Admin user already exists!")
+            print("To reset it, run: python scripts/reset_admin_password.py")
             return
         
         # Get password from user
