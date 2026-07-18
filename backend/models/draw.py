@@ -1,0 +1,66 @@
+"""Draw model - historical lottery results."""
+
+from datetime import date
+from decimal import Decimal
+from typing import Optional, List, Dict, Any
+
+from sqlalchemy import Column, Integer, Date, JSON, DECIMAL, String, Index, Text
+
+from backend.database.base import Base
+
+class Draw(Base):
+    """Represents a single lottery draw."""
+    
+    __tablename__ = "draws"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    draw_date = Column(Date, nullable=False, index=True)
+    numbers = Column(JSON, nullable=False)
+    bonus = Column(Integer, nullable=True)
+    jackpot_amount = Column(DECIMAL(15, 2), nullable=True)
+    total_sales = Column(DECIMAL(15, 2), nullable=True)
+    lottery_type = Column(String(50), nullable=False, default="6/49")
+    source = Column(String(100), nullable=True)
+    notes = Column(Text, nullable=True)
+    
+    __table_args__ = (
+        Index("idx_draw_date_lottery", "draw_date", "lottery_type"),
+    )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert draw to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "draw_date": self.draw_date.isoformat(),
+            "numbers": self.numbers,
+            "bonus": self.bonus,
+            "jackpot_amount": float(self.jackpot_amount) if self.jackpot_amount else None,
+            "total_sales": float(self.total_sales) if self.total_sales else None,
+            "lottery_type": self.lottery_type,
+        }
+    
+    def get_main_numbers(self) -> List[int]:
+        """Get main numbers (first 5 for Daily Grand, all 6 for 6/49)."""
+        if self.lottery_type == "Daily Grand":
+            return list(self.numbers)[:5] if self.numbers else []
+        return list(self.numbers) if self.numbers else []
+    
+    def get_grand_number(self) -> Optional[int]:
+        """Get grand number for Daily Grand (6th number)."""
+        if self.lottery_type == "Daily Grand" and self.numbers and len(self.numbers) > 5:
+            return self.numbers[5]
+        return None
+    
+    @property
+    def number_list(self) -> List[int]:
+        """Get numbers as Python list."""
+        return list(self.numbers) if self.numbers else []
+    
+    @property
+    def is_valid(self) -> bool:
+        """Check if draw has valid numbers."""
+        return (
+            self.numbers is not None
+            and isinstance(self.numbers, list)
+            and len(self.numbers) >= 6
+        )

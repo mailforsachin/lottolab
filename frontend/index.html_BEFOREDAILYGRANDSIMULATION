@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LottoLab - Lottery Analysis Platform</title>
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/auth.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1>🎲 LottoLab</h1>
+            <nav>
+                <a href="#dashboard">Dashboard</a>
+                <a href="#analysis">Analysis</a>
+                <a href="#simulations">Simulations</a>
+                <a href="#strategies">Strategies</a>
+                <a href="#" onclick="logout()" style="color:#ff6b6b;">Logout</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Dashboard Stats -->
+    <section id="dashboard" class="dashboard">
+        <div class="container">
+            <h2>Dashboard</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Lotto 6/49 Draws</div>
+                    <div class="stat-value" id="lottoDraws">-</div>
+                    <div class="stat-sub">Since 1982</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Daily Grand Draws</div>
+                    <div class="stat-value" id="dailyGrandDraws">-</div>
+                    <div class="stat-sub">Since 2016</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Draws</div>
+                    <div class="stat-value" id="totalDraws">-</div>
+                    <div class="stat-sub">All Games</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Your Best Win</div>
+                    <div class="stat-value">$2</div>
+                    <div class="stat-sub">So far</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Tickets Tested</div>
+                    <div class="stat-value" id="totalTickets">-</div>
+                    <div class="stat-sub">Across all simulations</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Game Selector -->
+    <section class="game-selector">
+        <div class="container">
+            <div style="display:flex;gap:20px;justify-content:center;margin:20px 0;">
+                <button onclick="switchGame('lotto649')" id="btn-lotto649" style="padding:12px 30px;background:linear-gradient(90deg,#f7971e,#ffd200);border:none;border-radius:8px;color:#000;font-weight:bold;cursor:pointer;">Lotto 6/49</button>
+                <button onclick="switchGame('dailygrand')" id="btn-dailygrand" style="padding:12px 30px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-weight:bold;cursor:pointer;">Daily Grand</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Frequency Analysis -->
+    <section id="analysis" class="analysis">
+        <div class="container">
+            <h2 id="gameTitle">Number Frequency Analysis - Lotto 6/49</h2>
+            <div class="chart-container">
+                <canvas id="frequencyChart"></canvas>
+            </div>
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="label">Most Frequent:</span>
+                    <span class="value" id="mostFrequent">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Least Frequent:</span>
+                    <span class="value" id="leastFrequent">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Total Draws:</span>
+                    <span class="value" id="totalDrawsCount">-</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Daily Grand Analysis -->
+    <section id="daily-grand-analysis" class="analysis" style="display:none;">
+        <div class="container">
+            <h2>Daily Grand Analysis</h2>
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="label">Top Main Numbers:</span>
+                    <span class="value" id="topMainNumbers">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Top Grand Numbers:</span>
+                    <span class="value" id="topGrandNumbers">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="label">Total Draws:</span>
+                    <span class="value" id="dailyGrandTotal">-</span>
+                </div>
+            </div>
+            <div style="margin-top:20px;background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;">
+                <h3>🎯 Recommended Tickets</h3>
+                <div id="dailyGrandTickets" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:10px;">
+                    <!-- Tickets will be generated here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Strategies -->
+    <section id="strategies" class="strategies">
+        <div class="container">
+            <h2>Available Strategies</h2>
+            <div class="strategies-grid" id="strategiesList">
+                <!-- Dynamically loaded -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Simulations Section -->
+    <section id="simulations" class="simulations">
+        <div class="container">
+            <h2>Strategy Performance</h2>
+            <div class="simulation-controls">
+                <select id="strategySelect">
+                    <option value="1">Random (Quick Pick)</option>
+                    <option value="2">Sobol Sequence</option>
+                    <option value="3">Monte Carlo Optimized</option>
+                    <option value="4">Genetic Algorithm</option>
+                    <option value="5">Hybrid AI</option>
+                </select>
+                <input type="number" id="ticketCount" value="1000" min="100" max="100000">
+                <button onclick="runSimulation()">Run Simulation</button>
+            </div>
+            <div id="simulationResults" class="simulation-results">
+                <!-- Results will appear here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>LottoLab © 2024 - PACTA Analytics</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

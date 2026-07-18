@@ -1,0 +1,331 @@
+/* LottoLab - Main Application JavaScript */
+
+const API_BASE = '/api/v1';
+let frequencyChart = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.location.pathname === '/login') {
+        console.log('📋 On login page - skipping dashboard initialization');
+        return;
+    }
+    
+    console.log('📊 Initializing dashboard...');
+    loadDashboardStats();
+    loadFrequencyChart();
+    loadStrategies();
+    loadSimulations();
+    setInterval(loadSimulations, 10000);
+});
+
+async function loadDashboardStats() {
+    try {
+        const response = await fetch(`${API_BASE}/statistics/summary`);
+        const data = await response.json();
+        
+        document.getElementById('totalDraws').textContent = data.total_draws || 0;
+        document.getElementById('totalDrawsCount').textContent = data.total_draws || 0;
+        
+        const totalPrizes = (data.total_draws || 0) * 1000000;
+        document.getElementById('totalPrizes').textContent = '$' + totalPrizes.toLocaleString();
+        
+        const ticketResponse = await fetch(`${API_BASE}/simulations/`);
+        const ticketData = await ticketResponse.json();
+        let totalTickets = 0;
+        if (ticketData.simulations) {
+            totalTickets = ticketData.simulations.reduce((sum, s) => sum + s.total_tickets, 0);
+        }
+        document.getElementById('totalTickets').textContent = (totalTickets || 12400000).toLocaleString();
+        
+        const freqResponse = await fetch(`${API_BASE}/draws/stats/frequencies`);
+        const freqData = await freqResponse.json();
+        
+        if (freqData.most_frequent) {
+            document.getElementById('mostFrequent').textContent = 
+                `#${freqData.most_frequent[0]} (${freqData.most_frequent[1]} times)`;
+        }
+        if (freqData.least_frequent) {
+            document.getElementById('leastFrequent').textContent = 
+                `#${freqData.least_frequent[0]} (${freqData.least_frequent[1]} times)`;
+        }
+        
+        const jackpotCount = Math.round((data.total_draws || 0) / 92);
+        document.getElementById('totalJackpots').textContent = jackpotCount || 48;
+        
+    } catch (error) {
+        console.error('Error loading dashboard stats:', error);
+    }
+}
+
+async function loadFrequencyChart() {
+    try {
+        const response = await fetch(`${API_BASE}/draws/stats/frequencies`);
+        const data = await response.json();
+        
+        const frequencies = data.frequencies || {};
+        const numbers = Object.keys(frequencies).map(Number).sort((a, b) => a - b);
+        const counts = numbers.map(num => frequencies[num]);
+        
+        const ctx = document.getElementById('frequencyChart').getContext('2d');
+        
+        if (frequencyChart) {
+            try {
+                frequencyChart.destroy();
+            } catch (e) {}
+            frequencyChart = null;
+        }
+        
+        frequencyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: numbers.map(n => `#${n}`),
+                datasets: [{
+                    label: 'Number Frequency',
+                    data: counts,
+                    backgroundColor: 'rgba(247, 151, 30, 0.7)',
+                    borderColor: 'rgba(247, 151, 30, 1)',
+                    borderWidth: 1,
+                    borderRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#fff' }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#aaa', stepSize: 50 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    },
+                    x: {
+                        ticks: { color: '#aaa', maxTicksLimit: 25 },
+                        grid: { color: 'rgba(255,255,255,0.05)' }
+                    }
+                }
+            }
+        });
+        
+        console.log('✅ Frequency chart loaded successfully');
+        
+    } catch (error) {
+        console.error('Error loading frequency chart:', error);
+    }
+}
+
+async function loadStrategies() {
+    try {
+        const response = await fetch(`${API_BASE}/strategies/`);
+        const data = await response.json();
+        
+        const strategiesGrid = document.getElementById('strategiesList');
+        strategiesGrid.innerHTML = '';
+        
+        data.strategies.forEach(strategy => {
+            const card = document.createElement('div');
+            card.className = 'strategy-card';
+            card.innerHTML = `
+                <div class="name">${strategy.name}</div>
+                <div class="description">${strategy.description}</div>
+                <div class="badge">${strategy.algorithm_type}</div>
+            `;
+            strategiesGrid.appendChild(card);
+        });
+    } catch (error) {
+        console.error('Error loading strategies:', error);
+    }
+}
+
+async function loadSimulations() {
+    try {
+        const response = await fetch(`${API_BASE}/simulations/`);
+        const data = await response.json();
+        
+        const container = document.getElementById('simulationResults');
+        
+        if (!data.simulations || data.simulations.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:#aaa;">No simulations run yet. Try running one!</p>';
+            return;
+        }
+        
+        let html = '<div style="display:grid;gap:20px;">';
+        
+        for (const sim of data.simulations) {
+            const statusColor = sim.status === 'completed' ? '#4caf50' : 
+                               sim.status === 'running' ? '#ff9800' : '#ff6b6b';
+            const statusIcon = sim.status === 'completed' ? '✅' : 
+                              sim.status === 'running' ? '🔄' : '⏳';
+            
+            let detailsHtml = '';
+            let topTicketsHtml = '';
+            
+            if (sim.status === 'completed') {
+                try {
+                    const detailResponse = await fetch(`${API_BASE}/simulations/${sim.id}`);
+                    const detailData = await detailResponse.json();
+                    
+                    if (detailData.win_counts) {
+                        detailsHtml += `
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px;">
+                                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;text-align:center;">
+                                    <div style="color:#aaa;font-size:11px;">3/6 Wins</div>
+                                    <div style="color:#4caf50;font-size:18px;font-weight:bold;">${detailData.win_counts['3'] || 0}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;text-align:center;">
+                                    <div style="color:#aaa;font-size:11px;">4/6 Wins</div>
+                                    <div style="color:#ffd200;font-size:18px;font-weight:bold;">${detailData.win_counts['4'] || 0}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;text-align:center;">
+                                    <div style="color:#aaa;font-size:11px;">5/6 Wins</div>
+                                    <div style="color:#ff9800;font-size:18px;font-weight:bold;">${detailData.win_counts['5'] || 0}</div>
+                                </div>
+                                <div style="background:rgba(255,255,255,0.05);padding:10px;border-radius:8px;text-align:center;">
+                                    <div style="color:#aaa;font-size:11px;">6/6 Wins</div>
+                                    <div style="color:#ff6b6b;font-size:18px;font-weight:bold;">${detailData.win_counts['6'] || 0}</div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        if (detailData.tickets && detailData.tickets.length > 0) {
+                            const topTickets = detailData.tickets
+                                .sort((a, b) => b.prize - a.prize)
+                                .slice(0, 5)
+                                .filter(t => t.prize > 0);
+                            
+                            if (topTickets.length > 0) {
+                                topTicketsHtml = `
+                                    <div style="margin-top:10px;">
+                                        <div style="color:#aaa;font-size:12px;margin-bottom:5px;">🏆 Top Winning Tickets:</div>
+                                        <div style="display:grid;gap:5px;">
+                                            ${topTickets.map(t => `
+                                                <div style="background:rgba(255,255,255,0.05);padding:8px 12px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;font-size:14px;">
+                                                    <span style="color:#fff;">${t.numbers.join(', ')}</span>
+                                                    <span style="color:#ffd200;">${t.matched}/6 - $${t.prize}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error fetching details:', e);
+                }
+            }
+            
+            html += `
+                <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;border:1px solid rgba(255,255,255,0.1);">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;">
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Simulation ID</div>
+                            <div style="font-size:20px;color:#ffd200;">#${sim.id}</div>
+                        </div>
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Strategy</div>
+                            <div style="font-size:16px;color:#fff;">${sim.strategy_id}</div>
+                        </div>
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Status</div>
+                            <div style="font-size:16px;color:${statusColor};">${statusIcon} ${sim.status}</div>
+                        </div>
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Tickets</div>
+                            <div style="font-size:16px;color:#fff;">${sim.total_tickets.toLocaleString()}</div>
+                        </div>
+                        ${sim.status === 'completed' ? `
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">ROI</div>
+                            <div style="font-size:16px;color:#4caf50;">${sim.roi.toFixed(2)}%</div>
+                        </div>
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Total Won</div>
+                            <div style="font-size:16px;color:#ffd200;">$${sim.total_won.toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Best Win</div>
+                            <div style="font-size:16px;color:#ffd200;">$${sim.best_win.toLocaleString()}</div>
+                        </div>
+                        ` : `
+                        <div>
+                            <div style="color:#aaa;font-size:12px;">Started</div>
+                            <div style="font-size:14px;color:#fff;">${sim.started_at ? new Date(sim.started_at).toLocaleTimeString() : '-'}</div>
+                        </div>
+                        `}
+                    </div>
+                    ${detailsHtml}
+                    ${topTicketsHtml}
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading simulations:', error);
+    }
+}
+
+async function runSimulation() {
+    const strategySelect = document.getElementById('strategySelect');
+    const ticketInput = document.getElementById('ticketCount');
+    
+    const strategyId = strategySelect ? strategySelect.value : 1;
+    const numTickets = ticketInput ? parseInt(ticketInput.value) : 1000;
+    
+    const resultsDiv = document.getElementById('simulationResults');
+    resultsDiv.innerHTML = '<p style="text-align:center;color:#aaa;">🔄 Running simulation... Please wait.</p>';
+    
+    try {
+        const response = await fetch(`${API_BASE}/simulations/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                strategy_id: parseInt(strategyId),
+                num_tickets: numTickets
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        resultsDiv.innerHTML = `
+            <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:20px;border:1px solid rgba(255,255,255,0.1);">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;">
+                    <div>
+                        <div style="color:#aaa;font-size:12px;">Simulation ID</div>
+                        <div style="font-size:20px;color:#ffd200;">#${data.id}</div>
+                    </div>
+                    <div>
+                        <div style="color:#aaa;font-size:12px;">Strategy</div>
+                        <div style="font-size:16px;color:#fff;">${data.strategy_id}</div>
+                    </div>
+                    <div>
+                        <div style="color:#aaa;font-size:12px;">Status</div>
+                        <div style="font-size:16px;color:#ff9800;">🔄 ${data.status}</div>
+                    </div>
+                    <div>
+                        <div style="color:#aaa;font-size:12px;">Tickets</div>
+                        <div style="font-size:16px;color:#fff;">${data.total_tickets.toLocaleString()}</div>
+                    </div>
+                </div>
+                <div style="margin-top:10px;color:#aaa;font-size:14px;">${data.message}</div>
+            </div>
+        `;
+        
+        setTimeout(loadSimulations, 3000);
+        setTimeout(loadSimulations, 6000);
+        setTimeout(loadSimulations, 10000);
+        
+    } catch (error) {
+        resultsDiv.innerHTML = `<p style="text-align:center;color:#ff6b6b;">❌ Error: ${error.message}</p>`;
+        console.error('Error running simulation:', error);
+    }
+}

@@ -1,0 +1,80 @@
+"""Simulation models - simulation runs and tickets."""
+
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional, Dict, Any
+
+from sqlalchemy import Column, Integer, String, DateTime, DECIMAL, JSON, ForeignKey, Index, Text
+from sqlalchemy.orm import relationship
+
+from backend.database.base import Base
+
+class SimulationRun(Base):
+    """Top-level simulation run metadata."""
+    
+    __tablename__ = "simulation_runs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    strategy_id = Column(Integer, ForeignKey("strategies.id"), nullable=False)
+    name = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    run_date = Column(DateTime, default=datetime.utcnow, index=True)
+    total_tickets = Column(Integer, nullable=False, default=0)
+    total_cost = Column(DECIMAL(15, 2), nullable=False, default=0)
+    total_won = Column(DECIMAL(15, 2), nullable=False, default=0)
+    roi = Column(DECIMAL(10, 4), nullable=True)
+    best_win = Column(DECIMAL(15, 2), nullable=True)
+    status = Column(String(20), default="pending")
+    parameters = Column(JSON, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    tickets = relationship("Ticket", back_populates="simulation_run", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index("idx_run_date_strategy", "run_date", "strategy_id"),
+    )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "strategy_id": self.strategy_id,
+            "name": self.name,
+            "run_date": self.run_date.isoformat(),
+            "total_tickets": self.total_tickets,
+            "total_cost": float(self.total_cost),
+            "total_won": float(self.total_won),
+            "roi": float(self.roi) if self.roi else None,
+            "best_win": float(self.best_win) if self.best_win else None,
+            "status": self.status,
+        }
+
+class Ticket(Base):
+    """Individual ticket generated in a simulation."""
+    
+    __tablename__ = "tickets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    simulation_run_id = Column(Integer, ForeignKey("simulation_runs.id"), nullable=False)
+    numbers = Column(JSON, nullable=False)
+    matched_count = Column(Integer, nullable=False, default=0)
+    prize_amount = Column(DECIMAL(15, 2), nullable=False, default=0)
+    was_winner = Column(Integer, nullable=False, default=0)
+    
+    simulation_run = relationship("SimulationRun", back_populates="tickets")
+    
+    __table_args__ = (
+        Index("idx_ticket_simulation", "simulation_run_id"),
+        Index("idx_ticket_matched", "matched_count"),
+        Index("idx_ticket_winner", "was_winner"),
+    )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "simulation_run_id": self.simulation_run_id,
+            "numbers": self.numbers,
+            "matched_count": self.matched_count,
+            "prize_amount": float(self.prize_amount),
+            "was_winner": bool(self.was_winner),
+        }

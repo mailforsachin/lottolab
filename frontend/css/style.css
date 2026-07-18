@@ -1,0 +1,304 @@
+/* LottoLab - Main Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    color: #fff;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header */
+.header {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    padding: 20px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    font-size: 28px;
+    background: linear-gradient(90deg, #f7971e, #ffd200);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.header nav a {
+    color: #aaa;
+    text-decoration: none;
+    margin-left: 30px;
+    transition: color 0.3s;
+}
+
+.header nav a:hover {
+    color: #fff;
+}
+
+/* Dashboard Stats */
+.dashboard {
+    padding: 40px 0;
+}
+
+.dashboard h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 32px;
+    color: #fff;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 25px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: bold;
+    margin: 10px 0;
+    background: linear-gradient(90deg, #f7971e, #ffd200);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.stat-sub {
+    font-size: 12px;
+    color: #666;
+}
+
+/* Analysis Section */
+.analysis {
+    padding: 40px 0;
+}
+
+.analysis h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 32px;
+}
+
+.chart-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    height: 400px;
+}
+
+.stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.stat-item {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 15px 25px;
+    border-radius: 8px;
+}
+
+.stat-item .label {
+    color: #aaa;
+    margin-right: 10px;
+}
+
+.stat-item .value {
+    color: #ffd200;
+    font-weight: bold;
+}
+
+/* Strategies */
+.strategies {
+    padding: 40px 0;
+}
+
+.strategies h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 32px;
+}
+
+.strategies-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.strategy-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s;
+}
+
+.strategy-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.02);
+}
+
+.strategy-card .name {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffd200;
+}
+
+.strategy-card .description {
+    color: #aaa;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.strategy-card .badge {
+    display: inline-block;
+    background: rgba(247, 151, 30, 0.2);
+    color: #f7971e;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    margin-top: 10px;
+}
+
+/* Simulations */
+.simulations {
+    padding: 40px 0;
+}
+
+.simulations h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 32px;
+}
+
+.simulation-controls {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 30px;
+}
+
+.simulation-controls select,
+.simulation-controls input,
+.simulation-controls button {
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 14px;
+}
+
+.simulation-controls select option {
+    background: #302b63;
+}
+
+.simulation-controls button {
+    background: linear-gradient(90deg, #f7971e, #ffd200);
+    color: #000;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+    transition: transform 0.3s;
+}
+
+.simulation-controls button:hover {
+    transform: scale(1.05);
+}
+
+.simulation-results {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    min-height: 100px;
+}
+
+/* Footer */
+.footer {
+    padding: 20px 0;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    color: #666;
+    margin-top: 40px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header .container {
+        flex-direction: column;
+        gap: 15px;
+    }
+    
+    .header nav a {
+        margin: 0 15px;
+        font-size: 14px;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .stat-value {
+        font-size: 24px;
+    }
+    
+    .stats-row {
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .simulation-controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .simulation-controls select,
+    .simulation-controls input,
+    .simulation-controls button {
+        width: 100%;
+        max-width: 300px;
+    }
+}

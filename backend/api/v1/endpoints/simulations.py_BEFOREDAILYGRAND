@@ -1,0 +1,229 @@
+"""Simulation endpoints."""
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from typing import Optional, List
+import random
+from datetime import datetime
+from sqlalchemy.orm import sessionmaker
+
+from backend.database.base import sync_engine
+from backend.models import Draw, SimulationRun, Ticket
+
+router = APIRouter()
+
+class SimulationRequest(BaseModel):
+    strategy_id: int
+    num_tickets: int = 1000
+    parameters: Optional[dict] = None
+
+class SimulationResponse(BaseModel):
+    id: int
+    strategy_id: int
+    total_tickets: int
+    status: str
+    message: str
+
+def generate_random_ticket():
+    """Generate a random ticket with 6 unique numbers between 1-49"""
+    return sorted(random.sample(range(1, 50), 6))
+
+def check_ticket_against_draws(ticket_numbers, draws):
+    """Check a ticket against all historical draws"""
+    best_match = 0
+    
+    for draw in draws:
+        matched = len(set(ticket_numbers) & set(draw.numbers))
+        if matched > best_match:
+            best_match = matched
+    
+    prize_map = {3: 10, 4: 100, 5: 1000, 6: 1000000}
+    prize_amount = prize_map.get(best_match, 0)
+    
+    return {'matches': best_match, 'prize_amount': prize_amount}
+
+def run_simulation_task(simulation_id, strategy_id, num_tickets):
+    """Background task to run simulation"""
+    Session = sessionmaker(bind=sync_engine)
+    session = Session()
+    
+    try:
+        # Update status to running
+        sim = session.query(SimulationRun).filter(SimulationRun.id == simulation_id).first()
+        if sim:
+            sim.status = "running"
+            sim.started_at = datetime.utcnow()
+            session.commit()
+        
+        # Get all draws
+        draws = session.query(Draw).all()
+        
+        tickets = []
+        total_cost = num_tickets * 3
+        total_won = 0
+        best_win = 0
+        win_counts = {3: 0, 4: 0, 5: 0, 6: 0}
+        
+        for i in range(num_tickets):
+            # Generate ticket
+            numbers = generate_random_ticket()
+            
+            # Check against draws
+            result = check_ticket_against_draws(numbers, draws)
+            
+            # Create ticket record
+            ticket = Ticket(
+                simulation_run_id=simulation_id,
+                numbers=numbers,
+                matched_count=result['matches'],
+                prize_amount=result['prize_amount'],
+                was_winner=1 if result['matches'] >= 3 else 0
+            )
+            tickets.append(ticket)
+            
+            total_won += result['prize_amount']
+            if result['matches'] >= 3:
+                win_counts[result['matches']] = win_counts.get(result['matches'], 0) + 1
+            
+            if result['prize_amount'] > best_win:
+                best_win = result['prize_amount']
+            
+            # Progress update
+            if (i + 1) % max(1, num_tickets // 10) == 0:
+                progress = int((i + 1) / num_tickets * 100)
+                print(f"  Progress: {progress}%")
+        
+        # Save all tickets
+        session.add_all(tickets)
+        
+        # Update simulation results
+        roi = (total_won - total_cost) / total_cost * 100 if total_cost > 0 else 0
+        
+        if sim:
+            sim.status = "completed"
+            sim.completed_at = datetime.utcnow()
+            sim.total_tickets = num_tickets
+            sim.total_cost = total_cost
+            sim.total_won = total_won
+            sim.roi = roi
+            sim.best_win = best_win
+            session.commit()
+        
+        print(f"✅ Simulation {simulation_id} completed!")
+        print(f"  Tickets: {num_tickets}, ROI: {roi:.2f}%")
+        print(f"  Wins: 3/6={win_counts[3]}, 4/6={win_counts[4]}, 5/6={win_counts[5]}, 6/6={win_counts[6]}")
+        
+    except Exception as e:
+        print(f"❌ Simulation error: {e}")
+        session.rollback()
+        if sim:
+            sim.status = "failed"
+            session.commit()
+    finally:
+        session.close()
+
+@router.get("/")
+async def get_simulations():
+    """Get all simulations."""
+    Session = sessionmaker(bind=sync_engine)
+    session = Session()
+    
+    try:
+        sims = session.query(SimulationRun).order_by(SimulationRun.id.desc()).limit(10).all()
+        return {
+            "simulations": [
+                {
+                    "id": s.id,
+                    "strategy_id": s.strategy_id,
+                    "total_tickets": s.total_tickets,
+                    "total_cost": float(s.total_cost) if s.total_cost else 0,
+                    "total_won": float(s.total_won) if s.total_won else 0,
+                    "roi": float(s.roi) if s.roi else 0,
+                    "best_win": float(s.best_win) if s.best_win else 0,
+                    "status": s.status,
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                    "completed_at": s.completed_at.isoformat() if s.completed_at else None
+                }
+                for s in sims
+            ]
+        }
+    finally:
+        session.close()
+
+@router.post("/", response_model=SimulationResponse)
+async def create_simulation(request: SimulationRequest, background_tasks: BackgroundTasks):
+    """Create a new simulation."""
+    Session = sessionmaker(bind=sync_engine)
+    session = Session()
+    
+    try:
+        sim = SimulationRun(
+            strategy_id=request.strategy_id,
+            total_tickets=0,
+            total_cost=0,
+            total_won=0,
+            status="pending",
+            parameters=request.parameters or {}
+        )
+        session.add(sim)
+        session.commit()
+        session.refresh(sim)
+        
+        background_tasks.add_task(
+            run_simulation_task,
+            sim.id,
+            request.strategy_id,
+            request.num_tickets
+        )
+        
+        return SimulationResponse(
+            id=sim.id,
+            strategy_id=request.strategy_id,
+            total_tickets=request.num_tickets,
+            status="pending",
+            message=f"Simulation created with {request.num_tickets} tickets"
+        )
+    finally:
+        session.close()
+
+@router.get("/{simulation_id}")
+async def get_simulation(simulation_id: int):
+    """Get a specific simulation with results."""
+    Session = sessionmaker(bind=sync_engine)
+    session = Session()
+    
+    try:
+        sim = session.query(SimulationRun).filter(SimulationRun.id == simulation_id).first()
+        if not sim:
+            raise HTTPException(status_code=404, detail="Simulation not found")
+        
+        tickets = session.query(Ticket).filter(Ticket.simulation_run_id == simulation_id).all()
+        
+        win_counts = {3: 0, 4: 0, 5: 0, 6: 0}
+        for ticket in tickets:
+            if ticket.matched_count >= 3:
+                win_counts[ticket.matched_count] = win_counts.get(ticket.matched_count, 0) + 1
+        
+        return {
+            "id": sim.id,
+            "strategy_id": sim.strategy_id,
+            "total_tickets": sim.total_tickets,
+            "total_cost": float(sim.total_cost) if sim.total_cost else 0,
+            "total_won": float(sim.total_won) if sim.total_won else 0,
+            "roi": float(sim.roi) if sim.roi else 0,
+            "best_win": float(sim.best_win) if sim.best_win else 0,
+            "status": sim.status,
+            "started_at": sim.started_at.isoformat() if sim.started_at else None,
+            "completed_at": sim.completed_at.isoformat() if sim.completed_at else None,
+            "win_counts": win_counts,
+            "tickets": [
+                {
+                    "numbers": ticket.numbers,
+                    "matched": ticket.matched_count,
+                    "prize": float(ticket.prize_amount)
+                }
+                for ticket in tickets[:10]
+            ]
+        }
+    finally:
+        session.close()
