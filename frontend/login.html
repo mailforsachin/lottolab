@@ -60,14 +60,10 @@
             border-radius: 8px;
             color: #fff;
             font-size: 16px;
-            transition: border-color 0.3s;
         }
         .form-group input:focus {
             outline: none;
             border-color: #f7971e;
-        }
-        .form-group input::placeholder {
-            color: #666;
         }
         .btn-login {
             width: 100%;
@@ -79,15 +75,9 @@
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            transition: transform 0.2s;
         }
-        .btn-login:hover {
-            transform: scale(1.02);
-        }
-        .btn-login:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
+        .btn-login:hover { transform: scale(1.02); }
+        .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
         .error-message {
             color: #ff6b6b;
             font-size: 14px;
@@ -95,9 +85,7 @@
             text-align: center;
             display: none;
         }
-        .error-message.show {
-            display: block;
-        }
+        .error-message.show { display: block; }
         .success-message {
             color: #4caf50;
             font-size: 14px;
@@ -105,9 +93,7 @@
             text-align: center;
             display: none;
         }
-        .success-message.show {
-            display: block;
-        }
+        .success-message.show { display: block; }
     </style>
 </head>
 <body>
@@ -118,15 +104,15 @@
         <form id="loginForm">
             <div class="form-group">
                 <label>Username</label>
-                <input type="text" id="username" value="admin" placeholder="Enter username">
+                <input type="text" id="username" placeholder="Enter username">
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" id="password" value="hellyeah2026!" placeholder="Enter password">
+                <input type="password" id="password" placeholder="Enter password">
             </div>
             <button type="submit" class="btn-login" id="loginBtn">Sign In</button>
             <div class="error-message" id="errorMessage">Invalid username or password</div>
-            <div class="success-message" id="successMessage">Login successful! Redirecting...</div>
+            <div class="success-message" id="successMessage">✅ Login successful! Redirecting...</div>
         </form>
     </div>
 
@@ -134,7 +120,7 @@
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
             const btn = document.getElementById('loginBtn');
             const errorMsg = document.getElementById('errorMessage');
@@ -146,6 +132,8 @@
             successMsg.classList.remove('show');
             
             try {
+                console.log('🔐 Login attempt for:', username);
+                
                 const response = await fetch('/api/v1/auth/login', {
                     method: 'POST',
                     headers: {

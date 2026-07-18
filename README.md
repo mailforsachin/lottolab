@@ -55,7 +55,7 @@
 ## 🎯 Usage
 
 - Dashboard: https://lottolab.omchat.ovh
-- Login: admin / hellyeah2026!
+- Login: admin / [your_password]
 - API Docs: https://lottolab.omchat.ovh/api/docs
 
 ## 📝 License
