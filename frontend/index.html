@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LottoLab - Lottery Analysis Platform</title>
-    
+
     <!-- Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
+
     <!-- CSS -->
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/auth.js"></script>
@@ -20,6 +20,7 @@
             <nav>
                 <a href="#dashboard">Dashboard</a>
                 <a href="#analysis">Analysis</a>
+                <a href="#portfolio-generator">Portfolio Generator</a>
                 <a href="#simulations">Simulations</a>
                 <a href="#strategies">Strategies</a>
                 <a href="#" onclick="logout()" style="color:#ff6b6b;">Logout</a>
@@ -90,6 +91,91 @@
                 <div class="stat-item">
                     <span class="label">Total Draws:</span>
                     <span class="value" id="totalDrawsCount">-</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Generator Section -->
+    <section id="portfolio-generator" class="portfolio-generator">
+        <div class="container">
+            <h2>Structural Portfolio Generator</h2>
+            <p class="subtitle">Generate a reproducible portfolio selected for structural diversity across an oversized candidate pool.</p>
+
+            <div class="portfolio-controls">
+                <div class="control-group">
+                    <label>Game</label>
+                    <select id="portfolioGame">
+                        <option value="6/49">Lotto 6/49</option>
+                        <option value="Daily Grand">Daily Grand</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Portfolio Size</label>
+                    <input type="number" id="portfolioSize" value="33" min="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Candidate Count</label>
+                    <input type="number" id="candidateCount" value="500" min="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Seed</label>
+                    <input type="number" id="portfolioSeed" value="0" min="0">
+                </div>
+            </div>
+
+            <div class="strategy-selector">
+                <label>Strategies</label>
+                <div class="strategy-checkboxes">
+                    <label><input type="checkbox" class="strategy-check" value="1" checked> Random</label>
+                    <label><input type="checkbox" class="strategy-check" value="2" checked> Sobol</label>
+                    <label><input type="checkbox" class="strategy-check" value="3" checked> Monte Carlo</label>
+                    <label><input type="checkbox" class="strategy-check" value="4" checked> Genetic</label>
+                    <label><input type="checkbox" class="strategy-check" value="5" checked> Hybrid</label>
+                </div>
+            </div>
+
+            <div class="portfolio-actions">
+                <button id="generatePortfolioBtn" onclick="generatePortfolio()">Generate Portfolio</button>
+                <div id="portfolioStatus" class="status-message"></div>
+                <div id="portfolioError" class="error-message"></div>
+            </div>
+
+            <!-- Results -->
+            <div id="portfolioResults" style="display:none;">
+                <!-- Summary -->
+                <div class="portfolio-summary">
+                    <div class="summary-grid" id="portfolioSummary">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Strategy Allocation -->
+                <div class="allocation-section">
+                    <h3>Strategy Allocation</h3>
+                    <div id="allocationTable" class="allocation-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Tickets -->
+                <div class="tickets-section">
+                    <h3>Selected Tickets</h3>
+                    <div id="portfolioTickets" class="tickets-grid">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+
+                <!-- Reproducibility -->
+                <div class="reproducibility-section">
+                    <div class="reproducibility-details">
+                        <span>Master Seed: <strong id="resultSeed">-</strong></span>
+                        <span>Strategies Used: <strong id="resultStrategies">-</strong></span>
+                        <span>API Version: <strong id="resultVersion">-</strong></span>
+                    </div>
                 </div>
             </div>
         </div>
