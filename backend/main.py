@@ -4,11 +4,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 import os
 
 from backend.config.settings import settings
-from backend.api.v1.endpoints import draws, simulations, strategies, statistics, auth
+from backend.api.v1.endpoints import (
+    auth,
+    draws,
+    portfolios,
+    simulations,
+    statistics,
+    strategies,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,22 +42,23 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 app.include_router(draws.router, prefix="/api/v1/draws", tags=["draws"])
-app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])
+app.include_router(portfolios.router, prefix="/api/v1/portfolios", tags=["portfolios"])
 app.include_router(simulations.router, prefix="/api/v1/simulations", tags=["simulations"])
 app.include_router(statistics.router, prefix="/api/v1/statistics", tags=["statistics"])
+app.include_router(strategies.router, prefix="/api/v1/strategies", tags=["strategies"])
 
 # Serve frontend
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
-    
+
     @app.get("/login")
     async def serve_login():
         login_path = os.path.join(frontend_path, "login.html")
         if os.path.exists(login_path):
             return FileResponse(login_path)
         return {"message": "Login page not found"}
-    
+
     @app.get("/")
     async def serve_frontend():
         index_path = os.path.join(frontend_path, "index.html")
