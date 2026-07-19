@@ -2,22 +2,19 @@
 Read-only adapter for loading historical training observations for portfolio construction.
 
 This adapter loads historical draw data from the database in deterministic chronological order,
-validates main numbers against game configuration, and returns immutable HistoricalDraw objects.
-
-Unlike SimulationDrawAdapter, this adapter:
-- Accepts rows with valid main numbers even if bonus metadata is invalid
-- Does not require complete outcome data
-- Is strictly read-only
-- Never mutates ORM objects
+validates main numbers against game configuration, and returns immutable HistoricalDraw objects
+with authoritative boundary metadata.
 """
 
 from typing import List, Tuple, Optional, Sequence
 import json
+from datetime import date
 from sqlalchemy.orm import Session
 
 from backend.models.draw import Draw
 from backend.core.algorithms.base import GameConfig
 from backend.services.walk_forward_backtest import HistoricalDraw
+from backend.models.portfolio_training import PortfolioTrainingSnapshot
 
 
 class PortfolioTrainingDrawAdapter:
@@ -27,6 +24,7 @@ class PortfolioTrainingDrawAdapter:
     Loads draws in deterministic chronological order (draw_date ASC, id ASC).
     Validates main numbers against canonical GameConfig.
     Preserves Grand Number for Daily Grand when available.
+    Returns authoritative metadata with the training snapshot.
     """
 
     def __init__(self, session: Session):
@@ -38,14 +36,14 @@ class PortfolioTrainingDrawAdapter:
         """
         self.session = session
 
-    def load_training_draws(
+    def load_training_snapshot(
         self,
         lottery_type: str,
         game: GameConfig,
         limit: Optional[int] = None
-    ) -> List[HistoricalDraw]:
+    ) -> PortfolioTrainingSnapshot:
         """
-        Load historical training draws for a specific lottery type.
+        Load historical training draws with authoritative metadata.
 
         Args:
             lottery_type: The lottery type to load ("6/49" or "Daily Grand")
@@ -53,7 +51,7 @@ class PortfolioTrainingDrawAdapter:
             limit: Optional limit on number of draws to load
 
         Returns:
-            List of HistoricalDraw objects in chronological order
+            PortfolioTrainingSnapshot with draws and authoritative metadata
 
         Raises:
             ValueError: If lottery_type is unsupported or data is malformed
@@ -74,6 +72,13 @@ class PortfolioTrainingDrawAdapter:
 
         draws = query.all()
 
+        if not draws:
+            return PortfolioTrainingSnapshot(
+                draws=(),
+                training_cutoff_date=None,
+                training_draw_count=0
+            )
+
         historical_draws = []
         for draw in draws:
             # Extract main numbers
@@ -88,13 +93,46 @@ class PortfolioTrainingDrawAdapter:
             # Extract grand number if applicable
             grand_number = self._extract_grand_number(draw, lottery_type)
 
+            # Create HistoricalDraw with authoritative draw_date
             historical_draws.append(HistoricalDraw(
                 draw_id=draw.id,
                 numbers=tuple(sorted(numbers)),
-                grand_number=grand_number
+                grand_number=grand_number,
+                draw_date=draw.draw_date.isoformat() if draw.draw_date else None
             ))
 
-        return historical_draws
+        # Authoritative metadata from exact database rows
+        training_cutoff_date = max(draw.draw_date for draw in draws)
+        training_draw_count = len(historical_draws)
+
+        return PortfolioTrainingSnapshot(
+            draws=tuple(historical_draws),
+            training_cutoff_date=training_cutoff_date,
+            training_draw_count=training_draw_count
+        )
+
+    def load_training_draws(
+        self,
+        lottery_type: str,
+        game: GameConfig,
+        limit: Optional[int] = None
+    ) -> List[HistoricalDraw]:
+        """
+        Legacy method - returns only draws for backward compatibility.
+
+        Args:
+            lottery_type: The lottery type to load ("6/49" or "Daily Grand")
+            game: GameConfig with validation rules
+            limit: Optional limit on number of draws to load
+
+        Returns:
+            List of HistoricalDraw objects in chronological order
+
+        Raises:
+            ValueError: If lottery_type is unsupported or data is malformed
+        """
+        snapshot = self.load_training_snapshot(lottery_type, game, limit)
+        return list(snapshot.draws)
 
     def _extract_main_numbers(self, draw: Draw, game: GameConfig) -> List[int]:
         """

@@ -623,6 +623,7 @@ function renderSavedPortfolioList() {
                 <div class="meta">Structural Score: <span class="score">${score}</span></div>
                 <div class="actions">
                     <button class="open-btn" onclick="openSavedPortfolio(${p.id})">Open</button>
+                    <button class="evaluate-btn" onclick="evaluatePortfolio(${p.id})">Evaluate</button>
                     <button class="delete-btn" onclick="confirmDeleteSavedPortfolio(${p.id})">Delete</button>
                 </div>
             </div>
@@ -909,3 +910,133 @@ window.deleteSavedPortfolio = deleteSavedPortfolio;
 window.savePortfolio = savePortfolio;
 window.generatePortfolio = generatePortfolio;
 window.renderPortfolioResults = renderPortfolioResults;
+
+/* ========================================
+   Portfolio Evaluation
+   ======================================== */
+
+async function evaluatePortfolio(portfolioId) {
+    const card = document.querySelector(`.saved-portfolio-card [data-portfolio-id="${portfolioId}"]`)?.closest('.saved-portfolio-card');
+    if (card) {
+        const btn = card.querySelector('.evaluate-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Evaluating...';
+        }
+    }
+
+    try {
+        const response = await fetch(`${SAVED_PORTFOLIOS_API}/${portfolioId}/evaluate`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 400) {
+                const data = await response.json().catch(() => ({}));
+                alert(data.detail || 'This portfolio cannot be evaluated (missing training boundary data).');
+            } else if (response.status === 404) {
+                alert('Portfolio not found.');
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return;
+        }
+
+        const data = await response.json();
+        showEvaluationResults(portfolioId, data);
+
+    } catch (error) {
+        console.error('Error evaluating portfolio:', error);
+        alert('Error evaluating portfolio. Please try again.');
+    } finally {
+        if (card) {
+            const btn = card.querySelector('.evaluate-btn');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Evaluate';
+            }
+        }
+    }
+}
+
+function showEvaluationResults(portfolioId, data) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center;
+        z-index: 1000; padding: 20px;
+    `;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+    const content = document.createElement('div');
+    content.style.cssText = `
+        background: #1a1a2e; border-radius: 16px; padding: 30px; max-width: 700px; width: 100%;
+        max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);
+    `;
+
+    const matchDist = data.match_distribution || {};
+    const matchRows = Object.entries(matchDist)
+        .sort((a, b) => Number(b[0]) - Number(a[0]))
+        .map(([matches, count]) => `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+                <span style="color:#aaa;">${matches}/6 matches</span>
+                <span style="color:#ffd200;">${count}</span>
+            </div>
+        `).join('');
+
+    content.innerHTML = `
+        <h3 style="color:#ffd200;margin:0 0 20px 0;">📊 Portfolio Evaluation</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;">
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Portfolio ID</div>
+                <div style="color:#fff;font-size:18px;">#${data.portfolio_id}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Game</div>
+                <div style="color:#fff;font-size:18px;">${data.game}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Cutoff Date</div>
+                <div style="color:#fff;font-size:14px;">${data.cutoff_date}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Draws Evaluated</div>
+                <div style="color:#ffd200;font-size:18px;">${data.evaluated_draw_count}</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Best Match</div>
+                <div style="color:#4caf50;font-size:18px;">${data.best_main_matches}/6</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;">
+                <div style="color:#aaa;font-size:12px;">Total Tickets</div>
+                <div style="color:#fff;font-size:18px;">${data.total_tickets}</div>
+            </div>
+            ${data.grand_match_distribution ? `
+            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;grid-column:span 2;">
+                <div style="color:#aaa;font-size:12px;">Grand Number Matches</div>
+                <div style="color:#ff6b6b;font-size:14px;">
+                    ${Object.entries(data.grand_match_distribution)
+                        .sort((a,b) => Number(b[0]) - Number(a[0]))
+                        .map(([count, draws]) => `${count} match${count > 1 ? 'es' : ''}: ${draws} draw${draws > 1 ? 's' : ''}`)
+                        .join(' | ')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        <div style="margin-top:15px;">
+            <div style="color:#aaa;font-size:13px;margin-bottom:10px;">Match Distribution</div>
+            ${matchRows || '<div style="color:#666;">No matches found</div>'}
+        </div>
+        <div style="margin-top:20px;color:#666;font-size:12px;border-top:1px solid rgba(255,255,255,0.05);padding-top:15px;">
+            <div>Eligible period: ${data.date_range[0]} → ${data.date_range[1]}</div>
+            <div style="margin-top:4px;">Evaluation is descriptive only. Does not imply future performance.</div>
+        </div>
+        <button onclick="this.closest('div[style*="fixed"]').remove()" style="margin-top:20px;padding:10px 30px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;cursor:pointer;">Close</button>
+    `;
+
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+}
+
+window.evaluatePortfolio = evaluatePortfolio;

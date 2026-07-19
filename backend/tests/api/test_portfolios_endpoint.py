@@ -22,7 +22,7 @@ from backend.services.multi_strategy_portfolio_service import (
     ProvenanceRecord
 )
 from backend.services.portfolio_optimizer import PortfolioOptimizerResult, PortfolioScore
-from backend.services.portfolio_training_draw_adapter import HistoricalDraw
+from backend.services.walk_forward_backtest import HistoricalDraw
 
 
 @pytest.fixture
@@ -105,7 +105,9 @@ def mock_portfolio_result():
         provenance=tuple(provenance),
         optimizer_result=optimizer_result,
         strategy_ids=(1, 2),
-        strategy_names=("Random", "Sobol")
+        strategy_names=("Random", "Sobol"),
+        training_cutoff_date=None,
+        training_draw_count=None
     )
 
 
@@ -181,7 +183,9 @@ def mock_daily_grand_result():
         provenance=tuple(provenance),
         optimizer_result=optimizer_result,
         strategy_ids=(1,),
-        strategy_names=("Random",)
+        strategy_names=("Random",),
+        training_cutoff_date=None,
+        training_draw_count=None
     )
 
 
@@ -253,7 +257,11 @@ class TestEndpointBehavior:
     def test_exactly_33_tickets_selected(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that exactly 33 tickets are selected by default."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -273,7 +281,11 @@ class TestEndpointBehavior:
     def test_lotto649_works(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that Lotto 6/49 works correctly."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -293,9 +305,11 @@ class TestEndpointBehavior:
     def test_daily_grand_preserves_grand_number(self, mock_service, mock_adapter, mock_db_session, mock_daily_grand_result):
         """Test that Daily Grand preserves Grand Number."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [
-            HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5), grand_number=7)
-        ]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5), grand_number=7)],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -316,7 +330,11 @@ class TestEndpointBehavior:
     def test_same_inputs_deterministic(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that same inputs produce identical responses."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -336,7 +354,11 @@ class TestEndpointBehavior:
     def test_explicit_strategy_subset_passed(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that explicit strategy subset is passed correctly."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -349,7 +371,7 @@ class TestEndpointBehavior:
             generate_portfolio(request, mock_db_session)
 
         mock_service_instance.build_portfolio.assert_called_with(
-            training_draws=mock_adapter_instance.load_training_draws.return_value,
+            training_snapshot=mock_adapter_instance.load_training_snapshot.return_value,
             game=LOTTO_649,
             portfolio_size=33,
             candidate_count=500,
@@ -362,7 +384,11 @@ class TestEndpointBehavior:
     def test_no_training_data_404(self, mock_service, mock_adapter, mock_db_session):
         """Test that no training data returns 404."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = []
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[],
+            training_cutoff_date=None,
+            training_draw_count=0
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         request = GeneratePortfolioRequest(game_type="6/49")
@@ -379,7 +405,11 @@ class TestEndpointBehavior:
     def test_service_value_error_maps_to_400(self, mock_service, mock_adapter, mock_db_session):
         """Test that service ValueError maps to 400."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -400,7 +430,11 @@ class TestEndpointBehavior:
     def test_unexpected_error_maps_to_500(self, mock_service, mock_adapter, mock_db_session):
         """Test that unexpected error maps to 500 without exposing internals."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -421,7 +455,11 @@ class TestEndpointBehavior:
     def test_response_contains_structural_metadata(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that response contains structural/reproducibility metadata."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()
@@ -444,7 +482,11 @@ class TestEndpointBehavior:
     def test_provenance_maps_by_structural_key(self, mock_service, mock_adapter, mock_db_session, mock_portfolio_result):
         """Test that provenance maps to correct ticket by structural key."""
         mock_adapter_instance = Mock()
-        mock_adapter_instance.load_training_draws.return_value = [HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))]
+        mock_adapter_instance.load_training_snapshot.return_value = Mock(
+            draws=[HistoricalDraw(draw_id=1, numbers=(1, 2, 3, 4, 5, 6))],
+            training_cutoff_date=None,
+            training_draw_count=1
+        )
         mock_adapter.return_value = mock_adapter_instance
 
         mock_service_instance = Mock()

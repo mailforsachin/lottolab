@@ -30,6 +30,12 @@ class PortfolioPersistenceRepository:
         Raises:
             ValueError: On validation failure
         """
+        # Extract training metadata
+        training_cutoff_date = portfolio_data.get("training_cutoff_date")
+        if training_cutoff_date and isinstance(training_cutoff_date, str):
+            from datetime import date
+            training_cutoff_date = date.fromisoformat(training_cutoff_date)
+
         # Create portfolio record
         portfolio = SavedPortfolio(
             user_id=user_id,
@@ -44,6 +50,8 @@ class PortfolioPersistenceRepository:
             structural_score=portfolio_data.get("structural_optimizer_score"),
             structural_metrics=portfolio_data.get("structural_optimizer_metrics"),
             generator_version=portfolio_data.get("version", "1.0.0"),
+            training_cutoff_date=training_cutoff_date,
+            training_draw_count=portfolio_data.get("training_draw_count", 0),
         )
 
         session.add(portfolio)
@@ -98,6 +106,21 @@ class PortfolioPersistenceRepository:
         portfolios = query.offset(offset).limit(limit).all()
 
         return portfolios, total
+
+    def count_by_user(
+        self,
+        session: Session,
+        user_id: int
+    ) -> int:
+        """
+        Count portfolios for a user.
+
+        Returns:
+            Total count of portfolios owned by the user
+        """
+        return session.query(SavedPortfolio).filter(
+            SavedPortfolio.user_id == user_id
+        ).count()
 
     def get_by_id(
         self,

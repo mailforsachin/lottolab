@@ -22,6 +22,7 @@ class HistoricalDraw:
     draw_id: int
     numbers: tuple[int, ...]
     grand_number: int | None = None
+    draw_date: str | None = None  # Authoritative draw date for training boundary
 
 
 @dataclass(frozen=True)
