@@ -270,35 +270,395 @@ body {
         flex-direction: column;
         gap: 15px;
     }
-    
+
     .header nav a {
         margin: 0 15px;
         font-size: 14px;
     }
-    
+
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .stat-value {
         font-size: 24px;
     }
-    
+
     .stats-row {
         flex-direction: column;
         align-items: center;
         gap: 10px;
     }
-    
+
     .simulation-controls {
         flex-direction: column;
         align-items: center;
     }
-    
+
     .simulation-controls select,
     .simulation-controls input,
     .simulation-controls button {
         width: 100%;
         max-width: 300px;
+    }
+}
+
+/* ========================================
+   Portfolio Generator
+   ======================================== */
+
+.portfolio-generator {
+    padding: 40px 0;
+}
+
+.portfolio-generator h2 {
+    text-align: center;
+    font-size: 32px;
+    margin-bottom: 10px;
+}
+
+.portfolio-generator .subtitle {
+    text-align: center;
+    color: #aaa;
+    font-size: 14px;
+    margin-bottom: 30px;
+}
+
+.portfolio-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.control-group label {
+    color: #aaa;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-group select,
+.control-group input {
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    transition: border-color 0.3s;
+}
+
+.control-group select:focus,
+.control-group input:focus {
+    outline: none;
+    border-color: #f7971e;
+}
+
+.control-group select option {
+    background: #302b63;
+}
+
+.strategy-selector {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.strategy-selector > label {
+    display: block;
+    color: #aaa;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.strategy-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 30px;
+}
+
+.strategy-checkboxes label {
+    color: #ddd;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.strategy-checkboxes input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #f7971e;
+    cursor: pointer;
+}
+
+.portfolio-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.portfolio-actions button {
+    padding: 14px 40px;
+    background: linear-gradient(90deg, #f7971e, #ffd200);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+.portfolio-actions button:hover:not(:disabled) {
+    transform: scale(1.03);
+}
+
+.portfolio-actions button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.status-message {
+    color: #ffd200;
+    font-size: 14px;
+    min-height: 24px;
+}
+
+.error-message {
+    color: #ff6b6b;
+    font-size: 14px;
+    min-height: 24px;
+}
+
+/* Results */
+.portfolio-summary {
+    margin: 30px 0 20px;
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.summary-item {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summary-item .label {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summary-item .value {
+    color: #ffd200;
+    font-size: 22px;
+    font-weight: bold;
+    margin-top: 4px;
+}
+
+/* Allocation */
+.allocation-section {
+    margin: 24px 0;
+}
+
+.allocation-section h3 {
+    color: #fff;
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.allocation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.allocation-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.allocation-item .name {
+    color: #ddd;
+    font-size: 14px;
+}
+
+.allocation-item .counts {
+    color: #aaa;
+    font-size: 13px;
+}
+
+.allocation-item .counts .requested {
+    color: #ffd200;
+}
+
+.allocation-item .counts .generated {
+    color: #4caf50;
+}
+
+/* Tickets */
+.tickets-section {
+    margin: 24px 0;
+}
+
+.tickets-section h3 {
+    color: #fff;
+    font-size: 18px;
+    margin-bottom: 12px;
+}
+
+.tickets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.ticket-card {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: border-color 0.3s;
+}
+
+.ticket-card:hover {
+    border-color: rgba(247, 151, 30, 0.3);
+}
+
+.ticket-card .ticket-number {
+    color: #666;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+.ticket-card .numbers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.ticket-card .ball {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f7971e, #ffd200);
+    color: #000;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 32px;
+}
+
+.ticket-card .ball.grand-ball {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: #fff;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    line-height: 32px;
+}
+
+.ticket-card .provenance {
+    color: #666;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+/* Reproducibility */
+.reproducibility-section {
+    margin: 24px 0 10px;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.reproducibility-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px 30px;
+    color: #888;
+    font-size: 13px;
+}
+
+.reproducibility-details strong {
+    color: #ddd;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .portfolio-controls {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .strategy-checkboxes {
+        gap: 10px 20px;
+    }
+
+    .tickets-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+
+    .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .allocation-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .portfolio-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .tickets-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ticket-card .ball {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+        line-height: 28px;
     }
 }
