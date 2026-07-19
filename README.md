@@ -65,3 +65,34 @@ MIT License - See LICENSE file for details
 ## ⚠️ Disclaimer
 
 LottoLab is for educational purposes only. Lottery is a form of gambling and should be approached responsibly.
+
+
+## Production Deployment
+
+### Health Check
+
+The application provides a health check endpoint:
+
+`GET /api/health`
+
+### Environment Configuration
+
+Use `.env.example` as the configuration template and keep the real `.env` file out of version control. Configure environment variables according to `backend/config/settings.py`.
+
+### Service
+
+LottoLab runs as a systemd service. Check its status with:
+
+```bash
+sudo systemctl status lottolab.service
+```
+
+### Database Schema
+
+The required database schema must exist before deployment. Saved portfolio functionality requires these tables:
+
+saved_portfolios
+saved_portfolio_tickets
+saved_portfolio_allocations
+
+Verify the database schema against the application models before deployment. The repository includes database setup tooling. Verify the appropriate schema-management procedure before applying any production database changes.
