@@ -7,7 +7,7 @@ using multiple strategies.
 
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 from sqlalchemy.orm import Session
 
 from backend.database.base import SyncSessionLocal
@@ -255,3 +255,260 @@ def _build_response(
         structural_optimizer_metrics=optimizer_metrics,
         version="1.0.0"
     )
+
+# ============================================
+# Authenticated Persistence Endpoints
+# ============================================
+
+from backend.services.portfolio_persistence_service import PortfolioPersistenceService
+from backend.models.user import User
+from backend.services.auth_service import get_current_user
+from backend.core.algorithms.base import LOTTO_649, DAILY_GRAND
+from backend.core.algorithms.registry import available_strategies
+
+
+class SavePortfolioRequest(BaseModel):
+    """Request model for saving a portfolio snapshot."""
+    game: str = Field(..., description="Game type: '6/49' or 'Daily Grand'")
+    portfolio_size: int = Field(..., ge=1)
+    selected_tickets: List[TicketResponse] = Field(..., min_length=1)
+    strategy_ids: List[int] = Field(...)
+    strategy_names: List[str] = Field(...)
+    requested_candidate_count: int = Field(..., ge=1)
+    generated_candidate_count: int = Field(..., ge=1)
+    unique_structural_candidate_count: int = Field(..., ge=1)
+    master_seed: int = Field(..., ge=0)
+    per_strategy_allocations: List[AllocationResponse] = Field(...)
+    structural_optimizer_score: Optional[float] = None
+    structural_optimizer_metrics: Optional[Dict[str, Any]] = None
+    version: str = Field(default="1.0.0")
+
+
+    @model_validator(mode='after')
+    def validate_candidate_counts(self) -> 'SavePortfolioRequest':
+        """Validate candidate counts are coherent."""
+        if self.generated_candidate_count < self.portfolio_size:
+            raise ValueError(f"generated_candidate_count ({self.generated_candidate_count}) must be >= portfolio_size ({self.portfolio_size})")
+        if self.unique_structural_candidate_count < self.portfolio_size:
+            raise ValueError(f"unique_structural_candidate_count ({self.unique_structural_candidate_count}) must be >= portfolio_size ({self.portfolio_size})")
+        if self.unique_structural_candidate_count > self.generated_candidate_count:
+            raise ValueError(f"unique_structural_candidate_count ({self.unique_structural_candidate_count}) must be <= generated_candidate_count ({self.generated_candidate_count})")
+        if len(self.strategy_ids) != len(self.strategy_names):
+            raise ValueError(f"strategy_ids length ({len(self.strategy_ids)}) must equal strategy_names length ({len(self.strategy_names)})")
+        return self
+    model_config = {"extra": "forbid"}
+
+    @field_validator('game')
+    @classmethod
+    def validate_game(cls, v: str) -> str:
+        """Validate game type is supported."""
+        if v not in GAME_CONFIGS:
+            raise ValueError(f"Unsupported game type: {v}. Supported: 6/49, Daily Grand")
+        return v
+
+    @field_validator('selected_tickets')
+    @classmethod
+    def validate_ticket_count(cls, v: List[TicketResponse], info) -> List[TicketResponse]:
+        """Validate ticket count matches portfolio_size."""
+        portfolio_size = info.data.get('portfolio_size', 0)
+        if len(v) != portfolio_size:
+            raise ValueError(f"selected_tickets count ({len(v)}) must equal portfolio_size ({portfolio_size})")
+        return v
+
+    @field_validator('selected_tickets')
+    @classmethod
+    def validate_ticket_structure(cls, v: List[TicketResponse], info) -> List[TicketResponse]:
+        """Validate ticket structure based on game type."""
+        game_type = info.data.get('game')
+        if not game_type:
+            return v
+
+        game_config = GAME_CONFIGS.get(game_type)
+        if not game_config:
+            return v
+
+        for ticket in v:
+            numbers = ticket.numbers
+            if len(numbers) != game_config.main_numbers_drawn:
+                raise ValueError(f"Ticket must have {game_config.main_numbers_drawn} numbers, got {len(numbers)}")
+
+            # Check range and uniqueness
+            if len(set(numbers)) != len(numbers):
+                raise ValueError("Ticket numbers must be unique")
+
+            for num in numbers:
+                if num < 1 or num > game_config.max_main_number:
+                    raise ValueError(f"Number {num} outside valid range 1-{game_config.max_main_number}")
+
+            # Check grand number
+            if game_config.grand_max is not None:
+                # Daily Grand: must have grand_number
+                if ticket.grand_number is None:
+                    raise ValueError("Daily Grand ticket must have grand_number")
+                if ticket.grand_number < 1 or ticket.grand_number > game_config.grand_max:
+                    raise ValueError(f"Grand number {ticket.grand_number} outside valid range 1-{game_config.grand_max}")
+            else:
+                # Lotto 6/49: must NOT have grand_number
+                if ticket.grand_number is not None:
+                    raise ValueError("Lotto 6/49 tickets must not have grand_number")
+
+        # Check structural uniqueness within portfolio
+        seen = set()
+        for ticket in v:
+            key = tuple(sorted(ticket.numbers))
+            if key in seen:
+                raise ValueError(f"Duplicate structural ticket found: {key}")
+            seen.add(key)
+
+        return v
+
+class SavePortfolioResponse(BaseModel):
+    """Response model for saving a portfolio."""
+    id: int
+    created_at: str
+    game_type: str
+    portfolio_size: int
+    ticket_count: int
+
+
+class ListPortfoliosResponse(BaseModel):
+    """Response model for listing portfolios."""
+    portfolios: List[Dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+
+class PortfolioDetailResponse(BaseModel):
+    """Response model for portfolio detail."""
+    id: int
+    game: str
+    portfolio_size: int
+    selected_tickets: List[TicketResponse]
+    strategy_ids: List[int]
+    strategy_names: List[str]
+    requested_candidate_count: int
+    generated_candidate_count: int
+    unique_structural_candidate_count: int
+    master_seed: int
+    per_strategy_allocations: List[AllocationResponse]
+    structural_optimizer_score: Optional[float]
+    structural_optimizer_metrics: Optional[Dict[str, Any]]
+    version: str
+    created_at: str
+    training_cutoff_date: Optional[str] = None
+    training_draw_count: Optional[int] = None
+
+
+@router.post("/", response_model=SavePortfolioResponse)
+def save_portfolio(
+    request: SavePortfolioRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> SavePortfolioResponse:
+    """
+    Save a portfolio snapshot to the authenticated user's account.
+
+    The snapshot must match the structure returned by POST /portfolios/generate.
+    """
+    try:
+        service = PortfolioPersistenceService()
+        portfolio = service.save_portfolio(
+            session=db,
+            user_id=current_user.id,
+            snapshot=request.model_dump()
+        )
+
+        return SavePortfolioResponse(
+            id=portfolio.id,
+            created_at=portfolio.created_at.isoformat(),
+            game_type=portfolio.game_type,
+            portfolio_size=portfolio.portfolio_size,
+            ticket_count=len(portfolio.tickets)
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save portfolio"
+        )
+
+
+@router.get("/", response_model=ListPortfoliosResponse)
+def list_portfolios(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> ListPortfoliosResponse:
+    """
+    List saved portfolios for the authenticated user.
+    """
+    service = PortfolioPersistenceService()
+    result = service.list_portfolios(
+        session=db,
+        user_id=current_user.id,
+        limit=min(limit, 100),
+        offset=max(offset, 0)
+    )
+
+    return ListPortfoliosResponse(**result)
+
+
+@router.get("/{portfolio_id}", response_model=PortfolioDetailResponse)
+def get_portfolio(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> PortfolioDetailResponse:
+    """
+    Get a saved portfolio by ID.
+
+    Returns 404 if the portfolio does not exist or belongs to another user.
+    """
+    service = PortfolioPersistenceService()
+    portfolio = service.get_portfolio(
+        session=db,
+        portfolio_id=portfolio_id,
+        user_id=current_user.id
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+
+    return PortfolioDetailResponse(**portfolio)
+
+
+@router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_portfolio(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a saved portfolio.
+
+    Returns 404 if the portfolio does not exist or belongs to another user.
+    """
+    service = PortfolioPersistenceService()
+    deleted = service.delete_portfolio(
+        session=db,
+        portfolio_id=portfolio_id,
+        user_id=current_user.id
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Portfolio not found"
+        )
+
+    return None
