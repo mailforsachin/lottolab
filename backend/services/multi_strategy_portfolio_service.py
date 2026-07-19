@@ -11,10 +11,12 @@ from typing import List, Tuple, Optional, Dict, Set, Any, Sequence
 import hashlib
 import copy
 from collections import OrderedDict
+from datetime import date
 
 from backend.core.algorithms.base import GameConfig, GeneratedTicket, ensure_unique_tickets
 from backend.core.algorithms.registry import available_strategies, get_strategy
 from backend.services.portfolio_optimizer import PortfolioOptimizer, PortfolioOptimizerResult
+from backend.models.portfolio_training import PortfolioTrainingSnapshot
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,8 @@ class MultiStrategyPortfolioResult:
     optimizer_result: PortfolioOptimizerResult
     strategy_ids: Tuple[int, ...]
     strategy_names: Tuple[str, ...]
+    training_cutoff_date: Optional[date] = None
+    training_draw_count: Optional[int] = None
 
 
 class MultiStrategyPortfolioService:
@@ -195,8 +199,9 @@ class MultiStrategyPortfolioService:
 
     def build_portfolio(
         self,
-        training_draws: Sequence[Any],
-        game: GameConfig,
+        training_draws: Optional[Sequence[Any]] = None,
+        training_snapshot: Optional[PortfolioTrainingSnapshot] = None,
+        game: Optional[GameConfig] = None,
         portfolio_size: int = 33,
         candidate_count: int = 500,
         master_seed: int = 0,
@@ -206,7 +211,8 @@ class MultiStrategyPortfolioService:
         Build a structurally diversified portfolio using multiple strategies.
 
         Args:
-            training_draws: Historical draws for strategy generation
+            training_draws: Legacy parameter - list of training draws (backward compatibility)
+            training_snapshot: Training snapshot with authoritative metadata
             game: Game configuration
             portfolio_size: Number of tickets to select (default 33)
             candidate_count: Total candidates to generate across strategies (default 500)
@@ -219,6 +225,20 @@ class MultiStrategyPortfolioService:
         Raises:
             ValueError: For invalid inputs or insufficient candidates
         """
+        # Handle backward compatibility
+        if training_snapshot is None:
+            if training_draws is None:
+                raise ValueError("Either training_draws or training_snapshot must be provided")
+            # Create snapshot without date (legacy behavior)
+            training_snapshot = PortfolioTrainingSnapshot(
+                draws=tuple(training_draws),
+                training_cutoff_date=None,
+                training_draw_count=len(training_draws)
+            )
+
+        if game is None:
+            raise ValueError("game parameter is required")
+
         # Validate inputs
         if portfolio_size < 1:
             raise ValueError(f"portfolio_size must be >= 1, got {portfolio_size}")
@@ -246,8 +266,8 @@ class MultiStrategyPortfolioService:
                 f"candidate_count ({candidate_count}) must be >= number of strategies ({num_strategies})"
             )
 
-        # Snapshot training_draws
-        training_snapshot = tuple(training_draws)
+        # Use training snapshot draws for generation
+        training_draws = training_snapshot.draws
 
         # Get strategy info
         strategy_info = {}
@@ -275,7 +295,7 @@ class MultiStrategyPortfolioService:
             # Generate tickets with the strategy
             try:
                 tickets = strategy.generate(
-                    training_draws=training_snapshot,
+                    training_draws=training_draws,
                     ticket_count=count,
                     game=game,
                     seed=derived_seed,
@@ -412,5 +432,7 @@ class MultiStrategyPortfolioService:
             provenance=tuple(selected_provenance),
             optimizer_result=optimizer_result,
             strategy_ids=normalized_ids,
-            strategy_names=strategy_names
+            strategy_names=strategy_names,
+            training_cutoff_date=training_snapshot.training_cutoff_date,
+            training_draw_count=training_snapshot.training_draw_count
         )

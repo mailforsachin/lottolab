@@ -5,10 +5,11 @@ Provides endpoints for generating structurally diversified lottery portfolios
 using multiple strategies.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple, Set
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 from sqlalchemy.orm import Session
+from datetime import date
 
 from backend.database.base import SyncSessionLocal
 from backend.core.algorithms.base import GameConfig, LOTTO_649, DAILY_GRAND
@@ -21,6 +22,7 @@ from backend.services.multi_strategy_portfolio_service import (
     MultiStrategyPortfolioResult
 )
 from backend.services.portfolio_optimizer import PortfolioOptimizerResult
+from backend.models.portfolio_training import PortfolioTrainingSnapshot
 
 # Use canonical game configurations from base.py
 GAME_CONFIGS = {
@@ -110,6 +112,14 @@ class GeneratePortfolioResponse(BaseModel):
     per_strategy_allocations: List[AllocationResponse]
     structural_optimizer_score: Optional[float] = None
     structural_optimizer_metrics: Optional[Dict[str, Any]] = None
+    training_cutoff_date: Optional[str] = Field(
+        None,
+        description="Latest draw date included in training data (authoritative)"
+    )
+    training_draw_count: Optional[int] = Field(
+        None,
+        description="Exact number of training observations used"
+    )
     version: str = "1.0.0"
 
 
@@ -146,14 +156,14 @@ def generate_portfolio(
         # Resolve game configuration
         game_config = GAME_CONFIGS[request.game_type]
 
-        # Load training draws
+        # Load training draws with authoritative metadata using snapshot method
         adapter = PortfolioTrainingDrawAdapter(db)
-        training_draws = adapter.load_training_draws(
+        training_snapshot = adapter.load_training_snapshot(
             lottery_type=request.game_type,
             game=game_config
         )
 
-        if not training_draws:
+        if not training_snapshot.draws:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No training data found for game: {request.game_type}"
@@ -162,7 +172,7 @@ def generate_portfolio(
         # Build portfolio using MultiStrategyPortfolioService
         service = MultiStrategyPortfolioService()
         result = service.build_portfolio(
-            training_draws=training_draws,
+            training_snapshot=training_snapshot,
             game=game_config,
             portfolio_size=request.portfolio_size,
             candidate_count=request.candidate_count,
@@ -253,6 +263,9 @@ def _build_response(
         per_strategy_allocations=allocations,
         structural_optimizer_score=optimizer_score,
         structural_optimizer_metrics=optimizer_metrics,
+        training_cutoff_date=result.training_cutoff_date.isoformat()
+            if result.training_cutoff_date else None,
+        training_draw_count=result.training_draw_count,
         version="1.0.0"
     )
 
@@ -281,8 +294,15 @@ class SavePortfolioRequest(BaseModel):
     per_strategy_allocations: List[AllocationResponse] = Field(...)
     structural_optimizer_score: Optional[float] = None
     structural_optimizer_metrics: Optional[Dict[str, Any]] = None
+    training_cutoff_date: Optional[str] = Field(
+        None,
+        description="Latest draw date included in training data (from generation)"
+    )
+    training_draw_count: Optional[int] = Field(
+        None,
+        description="Number of training observations used (from generation)"
+    )
     version: str = Field(default="1.0.0")
-
 
     @model_validator(mode='after')
     def validate_candidate_counts(self) -> 'SavePortfolioRequest':
@@ -296,6 +316,7 @@ class SavePortfolioRequest(BaseModel):
         if len(self.strategy_ids) != len(self.strategy_names):
             raise ValueError(f"strategy_ids length ({len(self.strategy_ids)}) must equal strategy_names length ({len(self.strategy_names)})")
         return self
+
     model_config = {"extra": "forbid"}
 
     @field_validator('game')
@@ -362,6 +383,7 @@ class SavePortfolioRequest(BaseModel):
 
         return v
 
+
 class SavePortfolioResponse(BaseModel):
     """Response model for saving a portfolio."""
     id: int
@@ -396,8 +418,14 @@ class PortfolioDetailResponse(BaseModel):
     structural_optimizer_metrics: Optional[Dict[str, Any]]
     version: str
     created_at: str
-    training_cutoff_date: Optional[str] = None
-    training_draw_count: Optional[int] = None
+    training_cutoff_date: Optional[str] = Field(
+        None,
+        description="Latest draw date included in training data (authoritative)"
+    )
+    training_draw_count: Optional[int] = Field(
+        None,
+        description="Exact number of training observations used"
+    )
 
 
 @router.post("/", response_model=SavePortfolioResponse)
@@ -512,3 +540,86 @@ def delete_portfolio(
         )
 
     return None
+
+# ============================================
+# Portfolio Evaluation Endpoint
+# ============================================
+
+from backend.services.portfolio_evaluation_service import PortfolioEvaluationService
+
+
+class EvaluatePortfolioResponse(BaseModel):
+    """Response model for portfolio evaluation."""
+    portfolio_id: int
+    game: str
+    cutoff_date: str
+    evaluated_draw_count: int
+    date_range: Tuple[str, str]
+    match_distribution: Dict[int, int]
+    best_main_matches: int
+    best_main_match_draws: List[int]
+    grand_match_distribution: Optional[Dict[int, int]] = None
+    total_tickets: int
+
+
+@router.post("/{portfolio_id}/evaluate", response_model=EvaluatePortfolioResponse)
+def evaluate_portfolio(
+    portfolio_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> EvaluatePortfolioResponse:
+    """
+    Evaluate a saved portfolio against eligible later historical draws.
+
+    Requires:
+    - Portfolio must have verified training_cutoff_date
+    - Portfolio must be owned by the authenticated user
+    - Evaluation is descriptive only (no prediction/ROI/prize optimization)
+    """
+    try:
+        # Get and verify ownership
+        service = PortfolioPersistenceService()
+        portfolio = service.repository.get_by_id(db, portfolio_id, current_user.id)
+
+        if not portfolio:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Portfolio not found"
+            )
+
+        # Check training boundary
+        if portfolio.training_cutoff_date is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This portfolio cannot be evaluated because it lacks verified training-boundary metadata. Only portfolios generated with the current version support evaluation."
+            )
+
+        # Evaluate
+        eval_service = PortfolioEvaluationService(db)
+        result = eval_service.evaluate_portfolio(portfolio)
+
+        return EvaluatePortfolioResponse(
+            portfolio_id=result.portfolio_id,
+            game=result.game,
+            cutoff_date=result.cutoff_date,
+            evaluated_draw_count=result.evaluated_draw_count,
+            date_range=result.date_range,
+            match_distribution=result.match_distribution,
+            best_main_matches=result.best_main_matches,
+            best_main_match_draws=result.best_main_match_draws,
+            grand_match_distribution=result.grand_match_distribution,
+            total_tickets=result.total_tickets
+        )
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during evaluation"
+        )
