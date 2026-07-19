@@ -21,6 +21,7 @@
                 <a href="#dashboard">Dashboard</a>
                 <a href="#analysis">Analysis</a>
                 <a href="#portfolio-generator">Portfolio Generator</a>
+                <a href="#saved-portfolios">Saved Portfolios</a>
                 <a href="#simulations">Simulations</a>
                 <a href="#strategies">Strategies</a>
                 <a href="#" onclick="logout()" style="color:#ff6b6b;">Logout</a>
@@ -169,6 +170,12 @@
                     </div>
                 </div>
 
+                <!-- Save Portfolio -->
+                <div class="save-section">
+                    <button id="savePortfolioBtn" onclick="savePortfolio()" style="display:none;">Save Portfolio</button>
+                    <div id="saveStatus" class="status-message"></div>
+                </div>
+
                 <!-- Reproducibility -->
                 <div class="reproducibility-section">
                     <div class="reproducibility-details">
@@ -176,6 +183,22 @@
                         <span>Strategies Used: <strong id="resultStrategies">-</strong></span>
                         <span>API Version: <strong id="resultVersion">-</strong></span>
                     </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Saved Portfolios Section -->
+    <section id="saved-portfolios" class="saved-portfolios">
+        <div class="container">
+            <h2>My Saved Portfolios</h2>
+            <div id="savedPortfoliosList" class="saved-portfolios-list">
+                <!-- Dynamically populated -->
+            </div>
+            <div id="savedPortfolioDetail" class="saved-portfolio-detail" style="display:none;">
+                <button onclick="closeSavedPortfolioDetail()" class="back-btn">← Back to List</button>
+                <div id="savedPortfolioDetailContent">
+                    <!-- Reuses portfolio rendering -->
                 </div>
             </div>
         </div>

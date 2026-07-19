@@ -3,6 +3,10 @@
 const API_BASE = '/api/v1';
 let frequencyChart = null;
 let currentGame = 'lotto649';
+let currentGeneratedPortfolio = null;
+let savedPortfoliosList = [];
+let isSaving = false;
+let isDeleting = false;
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
@@ -17,33 +21,29 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStrategies();
     loadSimulations();
     loadDailyGrandAnalysis();
+    loadSavedPortfolios();
 
-    // Auto-refresh simulations every 10 seconds
     setInterval(loadSimulations, 10000);
 });
 
 function switchGame(game) {
     currentGame = game;
 
-    // Update buttons
     document.getElementById('btn-lotto649').style.background = game === 'lotto649' ? 'linear-gradient(90deg,#f7971e,#ffd200)' : 'rgba(255,255,255,0.1)';
     document.getElementById('btn-lotto649').style.color = game === 'lotto649' ? '#000' : '#fff';
     document.getElementById('btn-dailygrand').style.background = game === 'dailygrand' ? 'linear-gradient(90deg,#f7971e,#ffd200)' : 'rgba(255,255,255,0.1)';
     document.getElementById('btn-dailygrand').style.color = game === 'dailygrand' ? '#000' : '#fff';
 
-    // Show/hide sections
     document.getElementById('analysis').style.display = game === 'lotto649' ? 'block' : 'none';
     document.getElementById('daily-grand-analysis').style.display = game === 'dailygrand' ? 'block' : 'none';
     document.getElementById('gameTitle').textContent = game === 'lotto649' ? 'Number Frequency Analysis - Lotto 6/49' : 'Number Frequency Analysis - Daily Grand';
 
-    // Reload chart for selected game
     loadFrequencyChart();
     if (game === 'dailygrand') {
         loadDailyGrandAnalysis();
     }
 }
 
-// Load dashboard statistics
 async function loadDashboardStats() {
     try {
         const response = await fetch(`${API_BASE}/statistics/summary`);
@@ -51,7 +51,6 @@ async function loadDashboardStats() {
 
         document.getElementById('totalDraws').textContent = data.total_draws || 0;
         document.getElementById('totalDrawsCount').textContent = data.total_draws || 0;
-
         document.getElementById('lottoDraws').textContent = '4,434';
         document.getElementById('dailyGrandDraws').textContent = '1,017';
 
@@ -71,7 +70,6 @@ async function loadDashboardStats() {
     }
 }
 
-// Load frequency chart
 async function loadFrequencyChart() {
     try {
         const response = await fetch(`${API_BASE}/draws/stats/frequencies`);
@@ -132,22 +130,8 @@ async function loadFrequencyChart() {
     }
 }
 
-// Load Daily Grand analysis
-async function loadDailyGrandAnalysis() {
+function loadDailyGrandAnalysis() {
     try {
-        // For Daily Grand, we'll use the data from the database
-        const response = await fetch(`${API_BASE}/draws/stats/frequencies`);
-        const data = await response.json();
-
-        // Show top numbers
-        const sorted = Object.entries(data.frequencies || {})
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5);
-
-        document.getElementById('topMainNumbers').textContent =
-            sorted.map(([num, count]) => `#${num} (${count}x)`).join(', ');
-
-        // Show grand numbers
         const grandNums = {
             '1': 157, '2': 178, '3': 127, '4': 129, '5': 135, '6': 150, '7': 141
         };
@@ -157,7 +141,6 @@ async function loadDailyGrandAnalysis() {
 
         document.getElementById('topGrandNumbers').textContent =
             topGrand.map(([num, count]) => `#${num} (${count}x)`).join(', ');
-
         document.getElementById('dailyGrandTotal').textContent = '1,017';
 
         generateDailyGrandTickets();
@@ -182,7 +165,7 @@ function generateDailyGrandTickets() {
         } else {
             const hot = topMain.slice(0, 6).sort(() => Math.random() - 0.5).slice(0, 3);
             const cold = coldMain.sort(() => Math.random() - 0.5).slice(0, 2);
-            ticket = [...hot, ...cold].sort((a, b) => a - b);
+            ticket = sorted(hot + cold);
         }
 
         const grand = topGrand[Math.floor(Math.random() * topGrand.length)];
@@ -198,7 +181,6 @@ function generateDailyGrandTickets() {
     }
 }
 
-// Load strategies
 async function loadStrategies() {
     try {
         const response = await fetch(`${API_BASE}/strategies/`);
@@ -222,7 +204,6 @@ async function loadStrategies() {
     }
 }
 
-// Load simulations
 async function loadSimulations() {
     try {
         const response = await fetch(`${API_BASE}/simulations/`);
@@ -294,7 +275,6 @@ async function loadSimulations() {
     }
 }
 
-// Run simulation
 async function runSimulation() {
     const strategySelect = document.getElementById('strategySelect');
     const gameSelect = document.getElementById('gameSelect');
@@ -359,32 +339,44 @@ async function runSimulation() {
 }
 
 /* ========================================
-   Structural Portfolio Generator
+   Portfolio Generator
    ======================================== */
 
 const PORTFOLIO_API = '/api/v1/portfolios/generate';
+const SAVED_PORTFOLIOS_API = '/api/v1/portfolios';
+
+const STRATEGY_MAP = {
+    1: 'Random',
+    2: 'Sobol',
+    3: 'Monte Carlo',
+    4: 'Genetic',
+    5: 'Hybrid'
+};
 
 async function generatePortfolio() {
     const btn = document.getElementById('generatePortfolioBtn');
     const statusEl = document.getElementById('portfolioStatus');
     const errorEl = document.getElementById('portfolioError');
     const resultsEl = document.getElementById('portfolioResults');
+    const saveBtn = document.getElementById('savePortfolioBtn');
 
-    // Reset messages
+    // Reset state
+    currentGeneratedPortfolio = null;
+    saveBtn.style.display = 'none';
+    saveBtn.disabled = true;
+    document.getElementById('saveStatus').textContent = '';
+    document.getElementById('saveStatus').className = 'status-message';
+
     statusEl.textContent = '';
     errorEl.textContent = '';
 
-    // Get inputs
     const gameType = document.getElementById('portfolioGame').value;
     const portfolioSize = parseInt(document.getElementById('portfolioSize').value);
     const candidateCount = parseInt(document.getElementById('candidateCount').value);
     const seed = parseInt(document.getElementById('portfolioSeed').value);
-
-    // Get selected strategies
     const checkboxes = document.querySelectorAll('.strategy-check:checked');
     const strategyIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
-    // --- Validation ---
     if (isNaN(portfolioSize) || portfolioSize < 1) {
         errorEl.textContent = '❌ Portfolio Size must be a positive integer.';
         return;
@@ -410,7 +402,6 @@ async function generatePortfolio() {
         return;
     }
 
-    // --- Disable UI ---
     btn.disabled = true;
     btn.textContent = 'Generating...';
     statusEl.textContent = '⏳ Generating portfolio...';
@@ -434,7 +425,6 @@ async function generatePortfolio() {
         const data = await response.json();
 
         if (!response.ok) {
-            // Handle API error
             const detail = data.detail || 'An error occurred.';
             if (typeof detail === 'string') {
                 errorEl.textContent = `❌ ${detail}`;
@@ -448,15 +438,24 @@ async function generatePortfolio() {
             return;
         }
 
-        // --- Success ---
+        // Store the generated portfolio for saving
+        currentGeneratedPortfolio = data;
+
         statusEl.textContent = '✅ Portfolio generated successfully!';
         renderPortfolioResults(data);
         resultsEl.style.display = 'block';
+
+        // Enable save button
+        saveBtn.style.display = 'inline-block';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Portfolio';
+        saveBtn.className = '';
 
     } catch (error) {
         console.error('Portfolio generation error:', error);
         errorEl.textContent = '❌ Network error. Please check your connection and try again.';
         statusEl.textContent = '';
+        currentGeneratedPortfolio = null;
     } finally {
         btn.disabled = false;
         btn.textContent = 'Generate Portfolio';
@@ -464,7 +463,6 @@ async function generatePortfolio() {
 }
 
 function renderPortfolioResults(data) {
-    // --- Summary ---
     const summaryContainer = document.getElementById('portfolioSummary');
     summaryContainer.innerHTML = '';
 
@@ -487,7 +485,6 @@ function renderPortfolioResults(data) {
         summaryContainer.appendChild(div);
     });
 
-    // --- Strategy Allocation ---
     const allocationContainer = document.getElementById('allocationTable');
     allocationContainer.innerHTML = '';
 
@@ -508,29 +505,25 @@ function renderPortfolioResults(data) {
         allocationContainer.innerHTML = '<p style="color:#666;font-size:14px;">No allocation data available.</p>';
     }
 
-    // --- Tickets ---
     const ticketsContainer = document.getElementById('portfolioTickets');
     ticketsContainer.innerHTML = '';
 
     if (data.selected_tickets && data.selected_tickets.length > 0) {
-        const gameType = document.getElementById('portfolioGame').value;
+        const gameType = data.game;
         const isDailyGrand = gameType === 'Daily Grand';
 
         data.selected_tickets.forEach((ticket, index) => {
             const card = document.createElement('div');
             card.className = 'ticket-card';
 
-            // Ticket number
             const numLabel = document.createElement('div');
             numLabel.className = 'ticket-number';
             numLabel.textContent = `#${String(index + 1).padStart(2, '0')}`;
             card.appendChild(numLabel);
 
-            // Numbers
             const numsContainer = document.createElement('div');
             numsContainer.className = 'numbers';
 
-            // Main numbers
             const mainNumbers = ticket.numbers || [];
             mainNumbers.forEach(num => {
                 const ball = document.createElement('span');
@@ -539,7 +532,6 @@ function renderPortfolioResults(data) {
                 numsContainer.appendChild(ball);
             });
 
-            // Grand number for Daily Grand
             if (isDailyGrand && ticket.grand_number !== null && ticket.grand_number !== undefined) {
                 const grandBall = document.createElement('span');
                 grandBall.className = 'ball grand-ball';
@@ -550,7 +542,6 @@ function renderPortfolioResults(data) {
 
             card.appendChild(numsContainer);
 
-            // Provenance
             if (ticket.strategy_names && ticket.strategy_names.length > 0) {
                 const prov = document.createElement('div');
                 prov.className = 'provenance';
@@ -564,15 +555,357 @@ function renderPortfolioResults(data) {
         ticketsContainer.innerHTML = '<p style="color:#666;font-size:14px;">No tickets returned.</p>';
     }
 
-    // --- Reproducibility ---
     document.getElementById('resultSeed').textContent = data.master_seed !== undefined ? data.master_seed : 'N/A';
     document.getElementById('resultStrategies').textContent = data.strategy_names ? data.strategy_names.join(', ') : 'N/A';
     document.getElementById('resultVersion').textContent = data.version || '1.0.0';
 }
 
-// Legacy function - keep for backward compatibility
-function generateDailyGrandTickets() {
-    // This function is intentionally left as-is for the existing Daily Grand section.
-    // The new Portfolio Generator uses generatePortfolio() above.
-    // Do not remove or modify this function.
+/* ========================================
+   Saved Portfolios
+   ======================================== */
+
+async function loadSavedPortfolios() {
+    const container = document.getElementById('savedPortfoliosList');
+    container.innerHTML = '<p style="text-align:center;color:#666;">Loading...</p>';
+
+    try {
+        const response = await fetch(SAVED_PORTFOLIOS_API, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                container.innerHTML = '<p style="text-align:center;color:#ff6b6b;">Please log in to view saved portfolios.</p>';
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        savedPortfoliosList = data.portfolios || [];
+        renderSavedPortfolioList();
+
+    } catch (error) {
+        console.error('Error loading saved portfolios:', error);
+        container.innerHTML = '<p style="text-align:center;color:#ff6b6b;">Error loading saved portfolios.</p>';
+    }
 }
+
+function renderSavedPortfolioList() {
+    const container = document.getElementById('savedPortfoliosList');
+    const detailContainer = document.getElementById('savedPortfolioDetail');
+
+    detailContainer.style.display = 'none';
+
+    if (savedPortfoliosList.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="icon">📁</div>
+                <p>No saved portfolios yet.</p>
+                <p style="font-size:14px;color:#555;">Generate a portfolio and save it to see it here.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    savedPortfoliosList.forEach(p => {
+        const createdDate = p.created_at ? new Date(p.created_at).toLocaleDateString() : 'Unknown';
+        const createdTime = p.created_at ? new Date(p.created_at).toLocaleTimeString() : '';
+        const score = p.structural_score !== null && p.structural_score !== undefined ? p.structural_score.toFixed(4) : 'N/A';
+
+        html += `
+            <div class="saved-portfolio-card">
+                <div class="id">#${p.id}</div>
+                <div class="meta">Game: <span>${p.game_type || 'Unknown'}</span></div>
+                <div class="meta">Size: <span>${p.portfolio_size} tickets</span></div>
+                <div class="meta">Created: <span>${createdDate} ${createdTime}</span></div>
+                <div class="meta">Structural Score: <span class="score">${score}</span></div>
+                <div class="actions">
+                    <button class="open-btn" onclick="openSavedPortfolio(${p.id})">Open</button>
+                    <button class="delete-btn" onclick="confirmDeleteSavedPortfolio(${p.id})">Delete</button>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function normalizeSavedPortfolioForDisplay(savedData) {
+    return {
+        game: savedData.game,
+        portfolio_size: savedData.portfolio_size,
+        selected_tickets: savedData.selected_tickets || [],
+        strategy_ids: savedData.strategy_ids || [],
+        strategy_names: savedData.strategy_names || [],
+        requested_candidate_count: savedData.requested_candidate_count,
+        generated_candidate_count: savedData.generated_candidate_count,
+        unique_structural_candidate_count: savedData.unique_structural_candidate_count,
+        master_seed: savedData.master_seed,
+        per_strategy_allocations: savedData.per_strategy_allocations || [],
+        structural_optimizer_score: savedData.structural_optimizer_score,
+        structural_optimizer_metrics: savedData.structural_optimizer_metrics,
+        version: savedData.version,
+        _saved_id: savedData.id,
+        _created_at: savedData.created_at
+    };
+}
+
+async function openSavedPortfolio(portfolioId) {
+    const detailContainer = document.getElementById('savedPortfolioDetail');
+    const contentContainer = document.getElementById('savedPortfolioDetailContent');
+    const listContainer = document.getElementById('savedPortfoliosList');
+
+    listContainer.innerHTML = '<p style="text-align:center;color:#666;">Loading portfolio...</p>';
+    detailContainer.style.display = 'none';
+
+    try {
+        const response = await fetch(`${SAVED_PORTFOLIOS_API}/${portfolioId}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                listContainer.innerHTML = '<p style="text-align:center;color:#ff6b6b;">Portfolio not found.</p>';
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        const adaptedData = normalizeSavedPortfolioForDisplay(data);
+        renderSavedPortfolioDetail(adaptedData);
+
+        listContainer.innerHTML = '';
+        detailContainer.style.display = 'block';
+
+    } catch (error) {
+        console.error('Error opening saved portfolio:', error);
+        listContainer.innerHTML = '<p style="text-align:center;color:#ff6b6b;">Error loading portfolio.</p>';
+    }
+}
+
+function renderSavedPortfolioDetail(data) {
+    const container = document.getElementById('savedPortfolioDetailContent');
+
+    const summaryItems = [
+        { label: 'Portfolio Size', value: data.portfolio_size || 0 },
+        { label: 'Requested Candidates', value: data.requested_candidate_count || 0 },
+        { label: 'Generated Candidates', value: data.generated_candidate_count || 0 },
+        { label: 'Unique Structural', value: data.unique_structural_candidate_count || 0 },
+        { label: 'Structural Score', value: data.structural_optimizer_score !== null && data.structural_optimizer_score !== undefined ? data.structural_optimizer_score.toFixed(4) : 'N/A' },
+        { label: 'Master Seed', value: data.master_seed !== undefined ? data.master_seed : 'N/A' },
+    ];
+
+    let html = `
+        <div class="portfolio-summary">
+            <div class="summary-grid">
+    `;
+
+    summaryItems.forEach(item => {
+        html += `
+            <div class="summary-item">
+                <div class="label">${item.label}</div>
+                <div class="value">${item.value}</div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+    `;
+
+    if (data.per_strategy_allocations && data.per_strategy_allocations.length > 0) {
+        html += `
+            <div class="allocation-section">
+                <h3>Strategy Allocation</h3>
+                <div class="allocation-grid">
+        `;
+
+        data.per_strategy_allocations.forEach(alloc => {
+            html += `
+                <div class="allocation-item">
+                    <span class="name">${alloc.strategy_name || alloc.strategy_id}</span>
+                    <span class="counts">
+                        Requested: <span class="requested">${alloc.requested}</span>
+                        &nbsp;|&nbsp; Generated: <span class="generated">${alloc.generated}</span>
+                    </span>
+                </div>
+            `;
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
+    }
+
+    if (data.selected_tickets && data.selected_tickets.length > 0) {
+        const gameType = data.game;
+        const isDailyGrand = gameType === 'Daily Grand';
+
+        html += `
+            <div class="tickets-section">
+                <h3>Selected Tickets</h3>
+                <div class="tickets-grid">
+        `;
+
+        data.selected_tickets.forEach((ticket, index) => {
+            const mainNumbers = ticket.numbers || [];
+
+            html += `
+                <div class="ticket-card">
+                    <div class="ticket-number">#${String(index + 1).padStart(2, '0')}</div>
+                    <div class="numbers">
+            `;
+
+            mainNumbers.forEach(num => {
+                html += `<span class="ball">${num}</span>`;
+            });
+
+            if (isDailyGrand && ticket.grand_number !== null && ticket.grand_number !== undefined) {
+                html += `<span class="ball grand-ball" title="Grand Number">${ticket.grand_number}</span>`;
+            }
+
+            html += `
+                    </div>
+            `;
+
+            if (ticket.strategy_names && ticket.strategy_names.length > 0) {
+                html += `<div class="provenance">Sources: ${ticket.strategy_names.join(', ')}</div>`;
+            }
+
+            html += `
+                </div>
+            `;
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
+    }
+
+    html += `
+        <div class="reproducibility-section">
+            <div class="reproducibility-details">
+                <span>Master Seed: <strong>${data.master_seed !== undefined ? data.master_seed : 'N/A'}</strong></span>
+                <span>Strategies Used: <strong>${data.strategy_names ? data.strategy_names.join(', ') : 'N/A'}</strong></span>
+                <span>API Version: <strong>${data.version || '1.0.0'}</strong></span>
+                ${data._created_at ? `<span>Saved: <strong>${new Date(data._created_at).toLocaleString()}</strong></span>` : ''}
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function closeSavedPortfolioDetail() {
+    document.getElementById('savedPortfolioDetail').style.display = 'none';
+    loadSavedPortfolios();
+}
+
+function confirmDeleteSavedPortfolio(portfolioId) {
+    if (confirm(`Delete portfolio #${portfolioId}? This cannot be undone.`)) {
+        deleteSavedPortfolio(portfolioId);
+    }
+}
+
+async function deleteSavedPortfolio(portfolioId) {
+    if (isDeleting) return;
+    isDeleting = true;
+
+    try {
+        const response = await fetch(`${SAVED_PORTFOLIOS_API}/${portfolioId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                alert('Portfolio not found or already deleted.');
+            } else {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return;
+        }
+
+        await loadSavedPortfolios();
+
+    } catch (error) {
+        console.error('Error deleting portfolio:', error);
+        alert('Error deleting portfolio. Please try again.');
+    } finally {
+        isDeleting = false;
+    }
+}
+
+async function savePortfolio() {
+    if (isSaving) return;
+    if (!currentGeneratedPortfolio) {
+        document.getElementById('saveStatus').textContent = 'No portfolio to save. Generate one first.';
+        document.getElementById('saveStatus').className = 'status-message error';
+        return;
+    }
+
+    const btn = document.getElementById('savePortfolioBtn');
+    const statusEl = document.getElementById('saveStatus');
+
+    isSaving = true;
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    statusEl.textContent = '';
+    statusEl.className = 'status-message';
+
+    try {
+        const response = await fetch(SAVED_PORTFOLIOS_API, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify(currentGeneratedPortfolio)
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                statusEl.textContent = 'Please log in to save portfolios.';
+                statusEl.className = 'status-message error';
+                return;
+            }
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        statusEl.textContent = `✅ Portfolio saved! (ID: ${data.id})`;
+        statusEl.className = 'status-message success';
+        btn.textContent = 'Saved ✓';
+        btn.className = 'saved';
+
+        loadSavedPortfolios();
+
+    } catch (error) {
+        console.error('Error saving portfolio:', error);
+        statusEl.textContent = `❌ Error saving: ${error.message}`;
+        statusEl.className = 'status-message error';
+        btn.disabled = false;
+        btn.textContent = 'Save Portfolio';
+        btn.className = '';
+    } finally {
+        isSaving = false;
+    }
+}
+
+// Export functions for inline onclick handlers
+window.loadSavedPortfolios = loadSavedPortfolios;
+window.openSavedPortfolio = openSavedPortfolio;
+window.closeSavedPortfolioDetail = closeSavedPortfolioDetail;
+window.confirmDeleteSavedPortfolio = confirmDeleteSavedPortfolio;
+window.deleteSavedPortfolio = deleteSavedPortfolio;
+window.savePortfolio = savePortfolio;
+window.generatePortfolio = generatePortfolio;
+window.renderPortfolioResults = renderPortfolioResults;
