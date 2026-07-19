@@ -662,3 +662,169 @@ body {
         line-height: 28px;
     }
 }
+
+/* ========================================
+   Saved Portfolios
+   ======================================== */
+
+.saved-portfolios {
+    padding: 40px 0;
+}
+
+.saved-portfolios h2 {
+    text-align: center;
+    font-size: 32px;
+    margin-bottom: 30px;
+}
+
+.saved-portfolios-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.saved-portfolio-card {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: border-color 0.3s, transform 0.2s;
+}
+
+.saved-portfolio-card:hover {
+    border-color: rgba(247, 151, 30, 0.3);
+    transform: translateY(-2px);
+}
+
+.saved-portfolio-card .id {
+    color: #ffd200;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.saved-portfolio-card .meta {
+    color: #aaa;
+    font-size: 13px;
+    margin: 8px 0;
+}
+
+.saved-portfolio-card .meta span {
+    color: #ddd;
+}
+
+.saved-portfolio-card .score {
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.saved-portfolio-card .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.saved-portfolio-card .actions button {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    transition: opacity 0.2s;
+}
+
+.saved-portfolio-card .actions button:hover {
+    opacity: 0.8;
+}
+
+.saved-portfolio-card .actions .open-btn {
+    background: linear-gradient(90deg, #f7971e, #ffd200);
+    color: #000;
+}
+
+.saved-portfolio-card .actions .delete-btn {
+    background: rgba(255, 107, 107, 0.2);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.saved-portfolio-card .actions .delete-btn:hover {
+    background: rgba(255, 107, 107, 0.3);
+}
+
+.saved-portfolio-detail .back-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 8px 20px;
+    color: #aaa;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: background 0.2s;
+}
+
+.saved-portfolio-detail .back-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.empty-state {
+    text-align: center;
+    color: #666;
+    padding: 40px 0;
+    font-size: 16px;
+}
+
+.empty-state .icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+/* Save section */
+.save-section {
+    margin: 20px 0;
+    text-align: center;
+}
+
+.save-section button {
+    padding: 12px 30px;
+    background: linear-gradient(90deg, #4caf50, #66bb6a);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.2s, opacity 0.2s;
+}
+
+.save-section button:hover:not(:disabled) {
+    transform: scale(1.03);
+}
+
+.save-section button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.save-section button.saved {
+    background: rgba(255, 255, 255, 0.1);
+    color: #4caf50;
+    cursor: default;
+}
+
+.save-section button.saved:hover {
+    transform: none;
+}
+
+.save-section .status-message {
+    margin-top: 10px;
+    color: #aaa;
+    font-size: 14px;
+}
+
+.save-section .status-message.success {
+    color: #4caf50;
+}
+
+.save-section .status-message.error {
+    color: #ff6b6b;
+}
