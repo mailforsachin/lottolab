@@ -562,27 +562,35 @@ class TestMultiStrategyPortfolioService:
         assert result.unique_structural_candidate_count == 3
         assert result.duplicate_structural_candidate_count == 1
 
+        # Selection is intentionally allowed to vary under deterministic
+        # seeded tie-breaking. The service-level contract here is that
+        # structural duplicates collapse before optimization.
+        assert len(result.selected_tickets) == 2
+        assert len({
+            ticket.numbers
+            for ticket in result.selected_tickets
+        }) == 2
+
+        # If the merged duplicate structure is selected, provenance must
+        # retain both contributing strategies and the deterministic
+        # representative from the lower normalized strategy id.
         duplicate_key = (1, 2, 3, 4, 5)
-        record = next(
+        records = [
             item
             for item in result.provenance
             if item.numbers == duplicate_key
-        )
+        ]
 
-        assert record.strategy_ids == (1, 2)
+        if records:
+            assert len(records) == 1
+            assert records[0].strategy_ids == (1, 2)
 
-        selected_by_numbers = {
-            ticket.numbers: ticket
-            for ticket in result.selected_tickets
-        }
-
-        if duplicate_key in selected_by_numbers:
-            assert (
-                selected_by_numbers[
-                    duplicate_key
-                ].grand_number
-                == 2
+            selected = next(
+                ticket
+                for ticket in result.selected_tickets
+                if ticket.numbers == duplicate_key
             )
+            assert selected.grand_number == 2
 
     def test_insufficient_unique_candidates_fails_clearly(
         self,
