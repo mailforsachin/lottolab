@@ -258,8 +258,9 @@ class TestPortfolioOptimizer:
 
         result = self.optimizer.optimize(candidates, portfolio_size=5)
 
-        # First ticket should be normalized to sorted order
-        assert result.selected_tickets[0] == (1, 2, 3, 4, 5, 6)
+        # The unsorted input ticket must be normalized, regardless of
+        # seeded selection order.
+        assert (1, 2, 3, 4, 5, 6) in result.selected_tickets
 
     def test_duplicate_numbers_rejected(self):
         """Test that tickets with duplicate numbers are rejected."""
@@ -325,3 +326,84 @@ class TestPortfolioOptimizer:
         result = self.optimizer.optimize(candidates)
         assert len(result.selected_tickets) == 33
         assert result.portfolio_size == 33
+
+
+class TestPortfolioOptimizerSeededTieBreak:
+    """Regression tests for deterministic seeded tie-breaking."""
+
+    def setup_method(self):
+        self.optimizer = PortfolioOptimizer(
+            max_number=49,
+            numbers_per_ticket=6,
+        )
+        self.candidates = [
+            [1, 2, 3, 4, 5, 6],
+            [7, 8, 9, 10, 11, 12],
+            [13, 14, 15, 16, 17, 18],
+            [19, 20, 21, 22, 23, 24],
+            [25, 26, 27, 28, 29, 30],
+            [31, 32, 33, 34, 35, 36],
+            [37, 38, 39, 40, 41, 42],
+            [43, 44, 45, 46, 47, 48],
+        ]
+
+    def test_same_seed_reproduces_single_ticket_tie_break(self):
+        """Same pool and seed must reproduce the same one-ticket result."""
+        first = self.optimizer.optimize(
+            self.candidates,
+            portfolio_size=1,
+            seed=42,
+        )
+        second = self.optimizer.optimize(
+            self.candidates,
+            portfolio_size=1,
+            seed=42,
+        )
+
+        assert first.selected_tickets == second.selected_tickets
+
+    def test_different_seeds_can_choose_different_tied_single_tickets(self):
+        """Different seeds can resolve an all-tied first step differently."""
+        selections = {
+            self.optimizer.optimize(
+                self.candidates,
+                portfolio_size=1,
+                seed=seed,
+            ).selected_tickets[0]
+            for seed in range(20)
+        }
+
+        assert len(selections) > 1
+
+
+    def test_same_seed_is_independent_of_candidate_input_order(self):
+        """Same candidate set and seed must ignore incidental input order."""
+        forward = self.optimizer.optimize(
+            self.candidates,
+            portfolio_size=2,
+            seed=42,
+        )
+        reversed_order = self.optimizer.optimize(
+            list(reversed(self.candidates)),
+            portfolio_size=2,
+            seed=42,
+        )
+
+        assert forward.selected_tickets == reversed_order.selected_tickets
+        assert forward.portfolio_score == reversed_order.portfolio_score
+
+    def test_same_seed_reproduces_multi_ticket_portfolio(self):
+        """Seeded tie-breaking remains reproducible for multiple tickets."""
+        first = self.optimizer.optimize(
+            self.candidates,
+            portfolio_size=2,
+            seed=123,
+        )
+        second = self.optimizer.optimize(
+            self.candidates,
+            portfolio_size=2,
+            seed=123,
+        )
+
+        assert first.selected_tickets == second.selected_tickets
+        assert first.portfolio_score == second.portfolio_score

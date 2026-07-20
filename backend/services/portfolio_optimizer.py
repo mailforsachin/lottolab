@@ -8,6 +8,7 @@ the structural diversity of a ticket portfolio using PortfolioScorer.
 from dataclasses import dataclass, field
 from typing import List, Set, Tuple, Optional, FrozenSet, Sequence
 import copy
+import random
 
 from backend.services.portfolio_scorer import PortfolioScorer, PortfolioScore
 
@@ -172,27 +173,41 @@ class PortfolioOptimizer:
                 f"available, {portfolio_size} required"
             )
 
-        # Greedy forward selection
+        # Greedy forward selection.
+        #
+        # Structural score remains the primary selection criterion.
+        # When multiple candidates share the exact best score, use the
+        # caller-provided seed to choose deterministically among the ties.
+        # This prevents candidate input order from silently deciding ties.
         selected: List[Tuple[int, ...]] = []
         remaining = unique_candidates.copy()
+        rng = random.Random(seed)
 
         for _ in range(portfolio_size):
             best_score = None
-            best_ticket = None
-            best_idx = -1
+            best_indices: List[int] = []
 
             for idx, ticket in enumerate(remaining):
-                # Build proposed portfolio
                 proposed = selected + [ticket]
                 score = self.scorer.score(proposed)
 
                 if best_score is None or score.score > best_score.score:
                     best_score = score
-                    best_ticket = ticket
-                    best_idx = idx
+                    best_indices = [idx]
+                elif score.score == best_score.score:
+                    best_indices.append(idx)
 
-            if best_ticket is None:
+            if not best_indices:
                 raise RuntimeError("Failed to select a ticket during optimization")
+
+            # Canonicalize tied candidates before applying the seeded
+            # tie-break so the result depends on the candidate set and seed,
+            # not on incidental input/strategy ordering.
+            tied_tickets = sorted(
+                (remaining[idx], idx)
+                for idx in best_indices
+            )
+            best_ticket, best_idx = rng.choice(tied_tickets)
 
             selected.append(best_ticket)
             remaining.pop(best_idx)
